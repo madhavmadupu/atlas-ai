@@ -1,42 +1,36 @@
-"""Central configuration using pydantic-settings."""
-
+from pydantic_settings import BaseSettings
+from functools import lru_cache
 from pathlib import Path
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
 class Settings(BaseSettings):
-    """Application settings — override via environment variables or .env file."""
+    # App Config
+    APP_NAME: str = "Atlas-AI Engine"
+    API_V1_STR: str = "/api"
+    
+    # Model Configuration (GGUF & HuggingFace)
+    LLM_REPO_ID: str = "TheBloke/Llama-2-7b-Chat-GGUF"
+    LLM_FILENAME: str = "llama-2-7b-chat.Q4_K_M.gguf"
+    LLM_CONTEXT_WINDOW: int = 4096
+    LLM_GPU_LAYERS: int = -1  # -1 = auto/all to GPU if possible
+    
+    # Embedding Model (SentenceTransformers)
+    EMBEDDING_MODEL_ID: str = "sentence-transformers/all-MiniLM-L6-v2"
+    
+    # Paths
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent
+    DATA_DIR: Path = BASE_DIR / "data"
+    MODEL_CACHE_DIR: Path = DATA_DIR / "models"
+    CHROMA_PERSIST_DIR: Path = DATA_DIR / "chroma_db"
+    UPLOAD_DIR: Path = DATA_DIR / "uploads"
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-    )
+    # RAG Settings
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 200
+    SEARCH_K: int = 4  # Number of documents to retrieve
 
-    # ── Ollama ──────────────────────────────────────────────────────────
-    ollama_base_url: str = "http://localhost:11434"
-    llm_model: str = "llama3.2"
-    embedding_model: str = "nomic-embed-text"
+    class Config:
+        env_file = ".env"
 
-    # ── ChromaDB ────────────────────────────────────────────────────────
-    chroma_persist_dir: str = str(Path(__file__).resolve().parent.parent / "data" / "chroma_db")
-    chroma_collection_name: str = "atlas_documents"
-
-    # ── Document Processing ─────────────────────────────────────────────
-    chunk_size: int = 1000
-    chunk_overlap: int = 200
-    upload_dir: str = str(Path(__file__).resolve().parent.parent / "data" / "uploads")
-
-    # ── API ──────────────────────────────────────────────────────────────
-    api_title: str = "Atlas-AI Engine"
-    api_version: str = "0.1.0"
-    api_description: str = "Fully local AI backend with RAG capabilities"
-    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
-
-    # ── RAG ──────────────────────────────────────────────────────────────
-    rag_top_k: int = 5
-    rag_score_threshold: float = 0.3
-
-
-settings = Settings()
+@lru_cache()
+def get_settings():
+    return Settings()

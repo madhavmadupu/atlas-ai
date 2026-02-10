@@ -4,62 +4,50 @@
 
 - **Python 3.10+**
 - **Node.js 18+**
-- **Ollama** installed on your machine ([Download](https://ollama.com))
+- **Visual Studio Build Tools** (Optional, for GPU acceleration on Windows)
 
-## 1. Configure Ollama
+## 1. Backend Setup (`atlas-engine`)
 
-Ensure Ollama is running and pull the required models:
-
-```bash
-ollama pull llama3.2
-ollama pull nomic-embed-text
-```
-
-(Note: You can change the models in `atlas-engine/.env`)
-
-## 2. Backend Setup (`atlas-engine`)
+Atlas-AI runs models locally using `llama-cpp-python` and `sentence-transformers`.
 
 ```bash
 cd atlas-engine
 
 # Create virtual environment
 python -m venv .venv
-
-# Activate venv
-# Windows:
 .venv\Scripts\activate
-# Linux/Mac:
-source .venv/bin/activate
 
-# Install dependencies
+# Install dependencies (This includes PyTorch and Llama runtime)
 pip install -r requirements.txt
 
-# (Optional) Create .env
-cp .env.example .env
-
-# Start Server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# (Optional) GPU Acceleration
+# If you have an NVIDIA GPU, reinstall llama-cpp-python with CUDA support:
+# set CMAKE_ARGS="-DLLAMA_CUBLAS=on"
+# pip install llama-cpp-python --upgrade --force-reinstall --no-cache-dir
 ```
 
-Verify backend is running at [http://localhost:8000/docs](http://localhost:8000/docs).
+**First Run:**
+When you start the server for the first time, it will automatically download:
+1. **Llama-2-7b-Chat-GGUF** (~4GB)
+2. **all-MiniLM-L6-v2** (~80MB)
 
-## 3. Frontend Setup (`atlas-web`)
+Please be patient.
+
+```bash
+# Start Server
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+## 2. Frontend Setup (`atlas-web`)
 
 ```bash
 cd atlas-web
-
-# Install dependencies
 npm install
-
-# Start Dev Server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to use Atlas-AI.
+## 3. Configuration
 
-## 4. Usage
-
-- **Chat**: Type messages to chat with the local LLM.
-- **RAG**: Click the attachment icon 📎 to upload documents (PDF, TXT, MD).
-- **Context**: Once uploaded, the AI will automatically have access to your documents.
-- **Status**: The top-right indicator shows if Ollama is connected and if GPU is active.
+You can change the model in `atlas-engine/app/config.py`:
+- `LLM_REPO_ID`: Hugging Face repo (e.g., `TheBloke/Mistral-7B-Instruct-v0.2-GGUF`)
+- `LLM_FILENAME`: Specific GGUF file name.

@@ -1,37 +1,43 @@
-"""Embedding service using Ollama embeddings."""
-
+from langchain_core.embeddings import Embeddings
+from sentence_transformers import SentenceTransformer
+from app.config import get_settings
 import logging
-
-from langchain_ollama import OllamaEmbeddings
-
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+class EmbeddingService(Embeddings):
+    """
+    Embedding service using local SentenceTransformers model.
+    Compatible with LangChain's Embeddings interface.
+    """
+    _instance = None
+    _model = None
 
-class EmbeddingService:
-    """Generates vector embeddings via Ollama."""
+    def __init__(self):
+        self.settings = get_settings()
+        self._load_model()
 
-    def __init__(self) -> None:
-        self._embeddings: OllamaEmbeddings | None = None
-
-    @property
-    def embeddings(self) -> OllamaEmbeddings:
-        """Lazy-initialize the embeddings model."""
-        if self._embeddings is None:
-            self._embeddings = OllamaEmbeddings(
-                model=settings.embedding_model,
-                base_url=settings.ollama_base_url,
+    def _load_model(self):
+        if EmbeddingService._model is None:
+            logger.info(f"Loading embedding model: {self.settings.EMBEDDING_MODEL_ID}")
+            # Ensure model directory exists
+            self.settings.MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            
+            EmbeddingService._model = SentenceTransformer(
+                self.settings.EMBEDDING_MODEL_ID,
+                cache_folder=str(self.settings.MODEL_CACHE_DIR),
+                device="cpu", # Default to CPU to save VRAM
             )
-        return self._embeddings
+            logger.info("Embedding model loaded successfully.")
 
-    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of document texts."""
-        return await self.embeddings.aembed_documents(texts)
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Embed a list of texts."""
+        embeddings = EmbeddingService._model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+        return embeddings.tolist()
 
-    async def embed_query(self, text: str) -> list[float]:
-        """Embed a single query text."""
-        return await self.embeddings.aembed_query(text)
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a single query."""
+        return embedding.tolist()
 
 
 # Singleton instance

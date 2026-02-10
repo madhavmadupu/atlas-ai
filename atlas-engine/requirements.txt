@@ -6,14 +6,18 @@ python-multipart==0.0.20
 pydantic==2.11.3
 pydantic-settings==2.9.1
 
-# LLM & RAG
+# LLM & RAG Framework
 langchain==0.3.25
-langchain-ollama==0.3.3
 langchain-chroma==0.2.4
 langchain-text-splitters==0.3.8
 langchain-community==0.3.24
 
-# Vector DB - let langchain-chroma resolve the version
+# Local Inference (GGUF & Embeddings)
+llama-cpp-python==0.3.5
+sentence-transformers==3.3.1
+huggingface-hub==0.27.1
+
+# Vector DB
 chromadb>=1.0.9
 
 # Document Processing
@@ -21,3 +25,4 @@ pypdf==5.6.0
 
 # Streaming
 sse-starlette==2.2.1
+

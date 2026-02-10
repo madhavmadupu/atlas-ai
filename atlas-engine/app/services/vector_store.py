@@ -37,7 +37,7 @@ class VectorStoreService:
             self._stores[name] = Chroma(
                 client=self.client,
                 collection_name=name,
-                embedding_function=embedding_service.embeddings,
+                embedding_function=embedding_service,
             )
         return self._stores[name]
 

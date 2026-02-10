@@ -1,48 +1,56 @@
-"""Health and status API routes."""
-
 import logging
-
 from fastapi import APIRouter
-
-from app.config import settings
-from app.schemas import HealthResponse, ModelInfo, OllamaStatus
+from app.config import get_settings
+from app.schemas import HealthResponse, ModelConfig, ChromaStatus
 from app.services.llm_service import llm_service
 from app.services.vector_store import vector_store_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Health"])
 
-
 @router.get(
     "/health",
     response_model=HealthResponse,
     summary="System health check",
-    description="Returns system status including Ollama connection, GPU info, and ChromaDB state.",
+    description="Returns system status including loaded model info and ChromaDB state.",
 )
 async def health_check():
     """Check overall system health."""
-    ollama_status = await llm_service.check_health()
-    chroma_info = vector_store_service.get_collection_info()
+    
+    # Get model info
+    try:
+        model_info = llm_service.get_model_info()
+        model_status = ModelConfig(
+            model_name=model_info["model"],
+            repo_id=model_info["repo_id"],
+            gpu_layers=model_info["gpu_layers"],
+            context_window=model_info["context_window"]
+        )
+        llm_ok = True
+    except Exception as e:
+        logger.error(f"LLM Health Check failed: {e}")
+        llm_ok = False
+        model_status = ModelConfig(
+            model_name="error",
+            repo_id="error",
+            gpu_layers=0,
+            context_window=0
+        )
 
-    overall = "ok"
-    if not ollama_status["connected"]:
-        overall = "degraded"
+    # Get Chroma info
+    chroma_data = vector_store_service.get_collection_info()
+    chroma_status = ChromaStatus(
+        status=chroma_data.get("status", "unknown"),
+        persist_dir=str(chroma_data.get("persist_dir", "")),
+        collections=chroma_data.get("collections", 0),
+        total_documents=chroma_data.get("total_documents", 0)
+    )
+
+    overall = "ok" if (llm_ok and chroma_status.status == "connected") else "degraded"
 
     return HealthResponse(
         status=overall,
-        ollama=OllamaStatus(**ollama_status),
-        chroma_db=chroma_info,
-        engine_version=settings.api_version,
+        model=model_status,
+        chroma_db=chroma_status,
+        engine_version="0.2.0 (GGUF)"
     )
-
-
-@router.get(
-    "/models",
-    response_model=list[ModelInfo],
-    summary="List available models",
-    description="Lists all models available in the local Ollama installation.",
-)
-async def list_models():
-    """List available Ollama models."""
-    models = await llm_service.list_models()
-    return [ModelInfo(**m) for m in models]

@@ -1,82 +1,58 @@
-"""Pydantic schemas for API request/response models."""
-
+from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
-
-# ── Chat ─────────────────────────────────────────────────────────────────
+# --- Chat Models ---
 
 class ChatRequest(BaseModel):
-    """Incoming chat message."""
-    message: str = Field(..., min_length=1, description="User message text")
-    collection_name: str | None = Field(
-        None, description="ChromaDB collection for RAG context (omit for plain chat)"
-    )
-    stream: bool = Field(True, description="Whether to stream the response")
+    message: str
+    collection_name: Optional[str] = None
+    stream: bool = True
 
+class Source(BaseModel):
+    filename: str
+    chunk_index: int
+    score: float
+    preview: str
 
 class ChatResponse(BaseModel):
-    """Non-streaming chat response."""
-    response: str = Field(..., description="Assistant response text")
-    sources: list[dict] | None = Field(
-        None, description="Source documents used for RAG"
-    )
+    response: str
+    sources: Optional[List[Source]] = None
 
-
-class ChatStreamChunk(BaseModel):
-    """A single chunk in a streamed response."""
-    token: str = Field(..., description="Token text")
-    done: bool = Field(False, description="Whether this is the final chunk")
-    sources: list[dict] | None = None
-
-
-# ── Documents ────────────────────────────────────────────────────────────
+# --- Document Models ---
 
 class DocumentInfo(BaseModel):
-    """Metadata about an ingested document."""
     doc_id: str
     filename: str
     chunk_count: int
     collection_name: str
 
-
 class DocumentListResponse(BaseModel):
-    """List of ingested documents."""
-    documents: list[DocumentInfo]
+    documents: List[DocumentInfo]
     total: int
 
-
 class CollectionInfo(BaseModel):
-    """Info about a ChromaDB collection."""
     name: str
     count: int
 
-
 class CollectionListResponse(BaseModel):
-    """List of collections."""
-    collections: list[CollectionInfo]
+    collections: List[CollectionInfo]
 
+# --- Health Models ---
 
-# ── Health ───────────────────────────────────────────────────────────────
+class ModelConfig(BaseModel):
+    model_name: str
+    repo_id: str
+    gpu_layers: int
+    context_window: int
 
-class OllamaStatus(BaseModel):
-    """Ollama connection status."""
-    connected: bool
-    base_url: str
-    models: list[str] = []
-    gpu_available: bool = False
-    gpu_info: str | None = None
-
+class ChromaStatus(BaseModel):
+    status: str
+    persist_dir: str
+    collections: int
+    total_documents: int
 
 class HealthResponse(BaseModel):
-    """System health status."""
-    status: str = Field("ok", description="Overall status")
-    ollama: OllamaStatus
-    chroma_db: dict
-    engine_version: str
-
-
-class ModelInfo(BaseModel):
-    """Available model information."""
-    name: str
-    size: str | None = None
-    modified_at: str | None = None
+    status: str
+    model: ModelConfig
+    chroma_db: ChromaStatus
+    engine_version: str = "0.2.0 (GGUF)"

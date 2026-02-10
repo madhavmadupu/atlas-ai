@@ -1,141 +1,106 @@
-"""Ollama LLM service — handles chat generation with GPU/CPU auto-detection."""
-
 import logging
-from collections.abc import AsyncIterator
-
-import httpx
-from langchain_ollama import ChatOllama
-
-from app.config import settings
+import asyncio
+from typing import AsyncGenerator, List, Dict, Any, Optional
+from pathlib import Path
+from llama_cpp import Llama
+from huggingface_hub import hf_hub_download
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-
 class LLMService:
-    """Wrapper around Ollama for LLM inference."""
+    _model: Optional[Llama] = None
 
-    def __init__(self) -> None:
-        self._llm: ChatOllama | None = None
-        self._streaming_llm: ChatOllama | None = None
+    def __init__(self):
+        self.settings = get_settings()
+        self._ensure_model_loaded()
 
-    def _get_llm(self, streaming: bool = False) -> ChatOllama:
-        """Lazy-initialize the LLM client."""
-        if streaming:
-            if self._streaming_llm is None:
-                self._streaming_llm = ChatOllama(
-                    model=settings.llm_model,
-                    base_url=settings.ollama_base_url,
-                    streaming=True,
-                    temperature=0.7,
+    def _ensure_model_loaded(self):
+        if LLMService._model is not None:
+            return
+
+        # Ensure directory exists
+        self.settings.MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        
+        model_path = self.settings.MODEL_CACHE_DIR / self.settings.LLM_FILENAME
+        
+        # Download if missing
+        if not model_path.exists():
+            logger.info(f"⬇️ Downloading GGUF model: {self.settings.LLM_FILENAME} from {self.settings.LLM_REPO_ID}...")
+            try:
+                hf_hub_download(
+                    repo_id=self.settings.LLM_REPO_ID,
+                    filename=self.settings.LLM_FILENAME,
+                    local_dir=str(self.settings.MODEL_CACHE_DIR),
+                    local_dir_use_symlinks=False
                 )
-            return self._streaming_llm
+                logger.info("✅ Download complete.")
+            except Exception as e:
+                logger.error(f"❌ Failed to download model: {e}")
+                raise
 
-        if self._llm is None:
-            self._llm = ChatOllama(
-                model=settings.llm_model,
-                base_url=settings.ollama_base_url,
-                streaming=False,
-                temperature=0.7,
+        # Load model
+        logger.info(f"🧠 Loading Llama model from {model_path} (GPU Layers: {self.settings.LLM_GPU_LAYERS})...")
+        try:
+            LLMService._model = Llama(
+                model_path=str(model_path),
+                n_gpu_layers=self.settings.LLM_GPU_LAYERS,
+                n_ctx=self.settings.LLM_CONTEXT_WINDOW,
+                verbose=False
             )
-        return self._llm
+            logger.info("✅ Model loaded successfully.")
+        except Exception as e:
+            logger.error(f"❌ Failed to load Llama model: {e}")
+            raise
 
-    # ── Health & GPU info ────────────────────────────────────────────────
+    async def chat_stream(self, messages: List[Dict[str, str]]) -> AsyncGenerator[str, None]:
+        """
+        Stream chat completion tokens.
+        """
+        if LLMService._model is None:
+            raise RuntimeError("Model not loaded")
 
-    async def check_health(self) -> dict:
-        """Check Ollama server health and GPU availability."""
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{settings.ollama_base_url}/api/tags")
-                resp.raise_for_status()
-                data = resp.json()
-                models = [m["name"] for m in data.get("models", [])]
+        # Create generator in thread to avoid blocking event loop?
+        # Ideally yes, but for simplicity we iterate.
+        # Note: llama-cpp-python releases GIL during inference, so this might be OK?
+        # Actually generator iteration happens in python.
+        
+        stream = LLMService._model.create_chat_completion(
+            messages=messages,
+            stream=True,
+            temperature=0.7,
+            max_tokens=2048 # Reasonable limit
+        )
 
-            gpu_info = await self._get_gpu_info()
+        for chunk in stream:
+            delta = chunk['choices'][0]['delta']
+            if 'content' in delta:
+                yield delta['content']
+                # Yield control to event loop to allow other tasks (like heartbeats)
+                await asyncio.sleep(0)
 
-            return {
-                "connected": True,
-                "base_url": settings.ollama_base_url,
-                "models": models,
-                "gpu_available": gpu_info["available"],
-                "gpu_info": gpu_info["info"],
-            }
-        except Exception as exc:
-            logger.warning("Ollama health check failed: %s", exc)
-            return {
-                "connected": False,
-                "base_url": settings.ollama_base_url,
-                "models": [],
-                "gpu_available": False,
-                "gpu_info": None,
-            }
+    async def chat(self, messages: List[Dict[str, str]]) -> str:
+        """
+        Non-streaming chat completion.
+        """
+        if LLMService._model is None:
+            raise RuntimeError("Model not loaded")
 
-    async def _get_gpu_info(self) -> dict:
-        """Query Ollama for GPU information via the running model."""
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(
-                    f"{settings.ollama_base_url}/api/show",
-                    json={"name": settings.llm_model},
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    details = data.get("details", {})
-                    # Ollama exposes GPU usage info in model details
-                    return {
-                        "available": True,
-                        "info": f"Model: {settings.llm_model}, "
-                                f"Family: {details.get('family', 'unknown')}, "
-                                f"Parameters: {details.get('parameter_size', 'unknown')}, "
-                                f"Quantization: {details.get('quantization_level', 'unknown')}",
-                    }
-        except Exception:
-            pass
-        return {"available": False, "info": None}
+        response = await asyncio.to_thread(
+            LLMService._model.create_chat_completion,
+            messages=messages,
+            stream=False,
+            temperature=0.7
+        )
+        return response['choices'][0]['message']['content']
 
-    async def list_models(self) -> list[dict]:
-        """List all available Ollama models."""
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{settings.ollama_base_url}/api/tags")
-                resp.raise_for_status()
-                data = resp.json()
-                return [
-                    {
-                        "name": m["name"],
-                        "size": self._format_size(m.get("size", 0)),
-                        "modified_at": m.get("modified_at"),
-                    }
-                    for m in data.get("models", [])
-                ]
-        except Exception as exc:
-            logger.warning("Failed to list models: %s", exc)
-            return []
-
-    # ── Generation ───────────────────────────────────────────────────────
-
-    async def generate(self, prompt: str) -> str:
-        """Generate a non-streaming response."""
-        llm = self._get_llm(streaming=False)
-        response = await llm.ainvoke(prompt)
-        return response.content
-
-    async def generate_stream(self, prompt: str) -> AsyncIterator[str]:
-        """Generate a streaming response, yielding tokens."""
-        llm = self._get_llm(streaming=True)
-        async for chunk in llm.astream(prompt):
-            if chunk.content:
-                yield chunk.content
-
-    # ── Helpers ──────────────────────────────────────────────────────────
-
-    @staticmethod
-    def _format_size(size_bytes: int) -> str:
-        """Format bytes to human-readable size."""
-        for unit in ("B", "KB", "MB", "GB"):
-            if size_bytes < 1024:
-                return f"{size_bytes:.1f} {unit}"
-            size_bytes /= 1024
-        return f"{size_bytes:.1f} TB"
+    def get_model_info(self) -> Dict[str, Any]:
+        return {
+            "model": self.settings.LLM_FILENAME,
+            "repo_id": self.settings.LLM_REPO_ID,
+            "gpu_layers": self.settings.LLM_GPU_LAYERS,
+            "context_window": self.settings.LLM_CONTEXT_WINDOW
+        }
 
 
 # Singleton instance
