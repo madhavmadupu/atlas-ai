@@ -48,7 +48,7 @@ class RAGService:
         docs = vector_store_service.similarity_search(
             query=message,
             collection_name=collection_name,
-            k=self.settings.SEARCH_K
+            k=self.settings.search_k
         )
 
         sources = []

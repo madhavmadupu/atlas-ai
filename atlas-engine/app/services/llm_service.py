@@ -20,18 +20,18 @@ class LLMService:
             return
 
         # Ensure directory exists
-        self.settings.MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        self.settings.model_cache_dir.mkdir(parents=True, exist_ok=True)
         
-        model_path = self.settings.MODEL_CACHE_DIR / self.settings.LLM_FILENAME
+        model_path = self.settings.model_cache_dir / self.settings.llm_filename
         
         # Download if missing
         if not model_path.exists():
-            logger.info(f"⬇️ Downloading GGUF model: {self.settings.LLM_FILENAME} from {self.settings.LLM_REPO_ID}...")
+            logger.info(f"⬇️ Downloading GGUF model: {self.settings.llm_filename} from {self.settings.llm_repo_id}...")
             try:
                 hf_hub_download(
-                    repo_id=self.settings.LLM_REPO_ID,
-                    filename=self.settings.LLM_FILENAME,
-                    local_dir=str(self.settings.MODEL_CACHE_DIR),
+                    repo_id=self.settings.llm_repo_id,
+                    filename=self.settings.llm_filename,
+                    local_dir=str(self.settings.model_cache_dir),
                     local_dir_use_symlinks=False
                 )
                 logger.info("✅ Download complete.")
@@ -40,12 +40,12 @@ class LLMService:
                 raise
 
         # Load model
-        logger.info(f"🧠 Loading Llama model from {model_path} (GPU Layers: {self.settings.LLM_GPU_LAYERS})...")
+        logger.info(f"🧠 Loading Llama model from {model_path} (GPU Layers: {self.settings.llm_gpu_layers})...")
         try:
             LLMService._model = Llama(
                 model_path=str(model_path),
-                n_gpu_layers=self.settings.LLM_GPU_LAYERS,
-                n_ctx=self.settings.LLM_CONTEXT_WINDOW,
+                n_gpu_layers=self.settings.llm_gpu_layers,
+                n_ctx=self.settings.llm_context_window,
                 verbose=False
             )
             logger.info("✅ Model loaded successfully.")
@@ -96,10 +96,10 @@ class LLMService:
 
     def get_model_info(self) -> Dict[str, Any]:
         return {
-            "model": self.settings.LLM_FILENAME,
-            "repo_id": self.settings.LLM_REPO_ID,
-            "gpu_layers": self.settings.LLM_GPU_LAYERS,
-            "context_window": self.settings.LLM_CONTEXT_WINDOW
+            "model": self.settings.llm_filename,
+            "repo_id": self.settings.llm_repo_id,
+            "gpu_layers": self.settings.llm_gpu_layers,
+            "context_window": self.settings.llm_context_window
         }
 
 

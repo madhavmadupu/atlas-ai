@@ -19,13 +19,13 @@ class EmbeddingService(Embeddings):
 
     def _load_model(self):
         if EmbeddingService._model is None:
-            logger.info(f"Loading embedding model: {self.settings.EMBEDDING_MODEL_ID}")
+            logger.info(f"Loading embedding model: {self.settings.embedding_model_id}")
             # Ensure model directory exists
-            self.settings.MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            self.settings.model_cache_dir.mkdir(parents=True, exist_ok=True)
             
             EmbeddingService._model = SentenceTransformer(
-                self.settings.EMBEDDING_MODEL_ID,
-                cache_folder=str(self.settings.MODEL_CACHE_DIR),
+                self.settings.embedding_model_id,
+                cache_folder=str(self.settings.model_cache_dir),
                 device="cpu", # Default to CPU to save VRAM
             )
             logger.info("Embedding model loaded successfully.")
