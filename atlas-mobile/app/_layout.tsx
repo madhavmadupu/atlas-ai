@@ -10,11 +10,7 @@ export default function RootLayout() {
       <StatusBar style="light" />
       <Stack
         screenOptions={{
-          headerStyle: {
-            backgroundColor: Platform.OS === 'ios' ? 'transparent' : '#111111',
-          },
-          headerBlurEffect: Platform.OS === 'ios' ? 'systemChromeMaterialDark' : undefined,
-          headerTransparent: Platform.OS === 'ios',
+          headerStyle: { backgroundColor: '#111111' },
           headerTintColor: '#ffffff',
           contentStyle: { backgroundColor: '#0a0a0a' },
           headerShadowVisible: false,
@@ -22,7 +18,7 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="connect" options={{ title: 'Connect', headerLargeTitle: Platform.OS === 'ios' }} />
+        <Stack.Screen name="connect" options={{ title: 'Connect' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[id]" options={{ title: 'Chat', headerBackTitle: 'Back' }} />
       </Stack>
