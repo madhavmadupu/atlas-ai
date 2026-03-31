@@ -21,15 +21,15 @@ function ModelCard({ item, isActive, onDelete }: { item: OllamaModel; isActive: 
   const quant = item.details?.quantization_level ?? '—';
   const size = formatBytes(item.size);
 
-  // Pick an icon based on family
-  const familyIcon =
-    family.includes('llama') ? '🦙' :
-    family.includes('gemma') ? '💎' :
-    family.includes('phi') ? 'Φ' :
-    family.includes('qwen') ? '🌐' :
-    family.includes('mistral') ? '🌀' :
-    family.includes('deepseek') ? '🔍' :
-    '🧠';
+  // Pick a short label based on family
+  const familyLabel =
+    family.includes('llama') ? 'LL' :
+    family.includes('gemma') ? 'GM' :
+    family.includes('phi') ? 'PH' :
+    family.includes('qwen') ? 'QW' :
+    family.includes('mistral') ? 'MI' :
+    family.includes('deepseek') ? 'DS' :
+    'AI';
 
   const content = (
     <Pressable onLongPress={onDelete} style={({ pressed }) => pressed ? { opacity: 0.7 } : {}}>
@@ -37,7 +37,7 @@ function ModelCard({ item, isActive, onDelete }: { item: OllamaModel; isActive: 
         {/* Top row: icon + name + badge */}
         <View style={styles.topRow}>
           <View style={[styles.iconWrap, isActive && styles.iconWrapActive]}>
-            <Text style={styles.iconText}>{familyIcon}</Text>
+            <Text style={styles.iconText}>{familyLabel}</Text>
           </View>
           <View style={styles.nameCol}>
             <View style={styles.nameRow}>
@@ -124,7 +124,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(99,102,241,0.15)',
   },
   iconText: {
-    fontSize: 20,
+    fontSize: 13,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: -0.5,
   },
   nameCol: {
     flex: 1,
@@ -273,7 +276,7 @@ export default function ModelsScreen() {
           ) : (
             <View className="items-center">
               <View className="mb-4 h-20 w-20 items-center justify-center rounded-3xl bg-white/[0.04]">
-                <Text className="text-3xl">🧠</Text>
+                <Text className="text-xl font-bold text-white/20">AI</Text>
               </View>
               <Text className="mb-2 text-[17px] font-semibold text-white/50">No models found</Text>
               <Text className="text-center text-[14px] leading-5 text-white/25">

@@ -1,5 +1,13 @@
 import { Platform } from 'react-native';
 import { NativeTabs, NativeTabTrigger } from 'expo-router/unstable-native-tabs';
+import type { SymbolOrImageSource } from 'expo-router/unstable-native-tabs';
+
+function tabIcon(sfSymbol: string, androidImage: any): SymbolOrImageSource {
+  if (Platform.OS === 'ios') {
+    return { sf: sfSymbol as any };
+  }
+  return { src: androidImage };
+}
 
 export default function TabsLayout() {
   return (
@@ -20,27 +28,21 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Chats',
-          icon: Platform.OS === 'ios'
-            ? { sfSymbol: 'bubble.left.and.bubble.right.fill' }
-            : require('@/assets/icon.png'),
+          icon: tabIcon('bubble.left.and.bubble.right.fill', require('@/assets/tabs/chats.png')),
         }}
       />
       <NativeTabTrigger
         name="models"
         options={{
           title: 'Models',
-          icon: Platform.OS === 'ios'
-            ? { sfSymbol: 'cube.fill' }
-            : require('@/assets/icon.png'),
+          icon: tabIcon('cube.fill', require('@/assets/tabs/models.png')),
         }}
       />
       <NativeTabTrigger
         name="settings"
         options={{
           title: 'Settings',
-          icon: Platform.OS === 'ios'
-            ? { sfSymbol: 'gearshape.fill' }
-            : require('@/assets/icon.png'),
+          icon: tabIcon('gearshape.fill', require('@/assets/tabs/settings.png')),
         }}
       />
     </NativeTabs>

@@ -83,7 +83,7 @@ export default function ConnectScreen() {
         {/* Header */}
         <View className="mb-10 items-center">
           <View className="mb-5 h-24 w-24 items-center justify-center rounded-[28px] bg-indigo-500/10">
-            <Text className="text-5xl">🧠</Text>
+            <Text className="text-2xl font-black tracking-tighter text-indigo-400">Atlas</Text>
           </View>
           <Text className="mb-2 text-[26px] font-bold tracking-tight text-white">
             Connect to Desktop
@@ -129,7 +129,7 @@ export default function ConnectScreen() {
 
           {error && (
             <View className="mb-5 flex-row items-start gap-2.5 rounded-2xl border border-red-500/10 bg-red-500/[0.07] px-4 py-3">
-              <Text className="text-red-400">⚠</Text>
+              <Text className="text-[13px] text-red-400">!</Text>
               <Text className="flex-1 text-[13px] leading-5 text-red-400/90">{error}</Text>
             </View>
           )}
@@ -155,7 +155,7 @@ export default function ConnectScreen() {
         {/* Hint */}
         <View className="mt-8 items-center px-4">
           <Text className="text-center text-[12px] leading-5 text-white/20">
-            💡 Look for the LAN IP in the desktop app's server logs{'\n'}
+            Look for the LAN IP in the desktop app's server logs{'\n'}
             <Text className="font-mono text-white/30">http://192.168.x.x:3001</Text>
           </Text>
         </View>

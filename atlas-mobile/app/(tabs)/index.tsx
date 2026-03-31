@@ -131,7 +131,7 @@ export default function ChatListScreen() {
       {/* Search */}
       <View className="px-4 pb-3">
         <View className="flex-row items-center rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5">
-          <Text className="mr-2 text-white/20">🔍</Text>
+          <Text className="mr-2 text-[13px] text-white/20">⌕</Text>
           <TextInput
             value={search}
             onChangeText={setSearch}
@@ -190,7 +190,7 @@ export default function ChatListScreen() {
         ListEmptyComponent={
           <View className="items-center">
             <View className="mb-4 h-16 w-16 items-center justify-center rounded-3xl bg-white/[0.04]">
-              <Text className="text-2xl">{search ? '🔍' : '💬'}</Text>
+              <Text className="text-lg font-bold text-white/15">{search ? '?' : 'AI'}</Text>
             </View>
             <Text className="mb-1 text-base font-semibold text-white/50">
               {search ? 'No results' : 'No conversations yet'}
