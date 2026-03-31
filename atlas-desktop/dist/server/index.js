@@ -47,12 +47,13 @@ async function startServer({ port = 3001, host = "0.0.0.0", staticDir, } = {}) {
     await server.register(settings_1.settingsRoutes, { prefix: "/api" });
     // Serve the static Next.js export (UI)
     if (staticDir) {
+        const fs = require("fs");
+        const pathMod = require("path");
         await server.register(static_1.default, {
             root: staticDir,
             prefix: "/",
-            decorateReply: false,
         });
-        // SPA fallback: serve index.html for unmatched routes
+        // SPA fallback: serve correct HTML files for client-side routes
         server.setNotFoundHandler(async (request, reply) => {
             // Don't intercept API routes
             if (request.url.startsWith("/api/")) {
@@ -61,11 +62,9 @@ async function startServer({ port = 3001, host = "0.0.0.0", staticDir, } = {}) {
             // Try to serve the matching HTML file (e.g., /models → models.html)
             const routeName = request.url.split("?")[0].replace(/^\//, "");
             if (routeName) {
-                try {
+                const htmlFile = pathMod.join(staticDir, routeName + ".html");
+                if (fs.existsSync(htmlFile)) {
                     return reply.sendFile(routeName + ".html");
-                }
-                catch {
-                    // Fall through to index.html
                 }
             }
             return reply.sendFile("index.html");
