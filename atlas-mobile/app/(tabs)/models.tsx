@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, Pressable, RefreshControl, Alert, Platform, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Pressable, RefreshControl, Alert, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useConnectionStore } from '@/store/connection.store';
@@ -15,24 +15,53 @@ function formatBytes(bytes: number): string {
 }
 
 function ModelCard({ item, isActive, onDelete }: { item: OllamaModel; isActive: boolean; onDelete: () => void }) {
+  const name = item.name;
+  const family = item.details?.family ?? '—';
+  const params = item.details?.parameter_size ?? '—';
+  const quant = item.details?.quantization_level ?? '—';
+  const size = formatBytes(item.size);
+
+  // Pick an icon based on family
+  const familyIcon =
+    family.includes('llama') ? '🦙' :
+    family.includes('gemma') ? '💎' :
+    family.includes('phi') ? 'Φ' :
+    family.includes('qwen') ? '🌐' :
+    family.includes('mistral') ? '🌀' :
+    family.includes('deepseek') ? '🔍' :
+    '🧠';
+
   const content = (
-    <Pressable onLongPress={onDelete} style={({ pressed }) => [cs.card, pressed && cs.cardPressed]}>
-      <View className="flex-row items-start justify-between">
-        <View className="flex-1">
-          <View className="flex-row items-center gap-2">
-            <Text className="text-[16px] font-semibold text-white">{item.name}</Text>
-            {isActive && (
-              <View className="rounded-md bg-indigo-500/20 px-2 py-0.5">
-                <Text className="text-[10px] font-bold text-indigo-400">ACTIVE</Text>
-              </View>
-            )}
+    <Pressable onLongPress={onDelete} style={({ pressed }) => pressed ? { opacity: 0.7 } : {}}>
+      <View style={styles.cardInner}>
+        {/* Top row: icon + name + badge */}
+        <View style={styles.topRow}>
+          <View style={[styles.iconWrap, isActive && styles.iconWrapActive]}>
+            <Text style={styles.iconText}>{familyIcon}</Text>
           </View>
-          <View className="mt-2.5 flex-row flex-wrap items-center gap-3">
-            <Tag label="Size" value={formatBytes(item.size)} />
-            {item.details?.parameter_size && <Tag label="Params" value={item.details.parameter_size} />}
-            {item.details?.quantization_level && <Tag label="Quant" value={item.details.quantization_level} />}
-            {item.details?.family && <Tag label="Family" value={item.details.family} />}
+          <View style={styles.nameCol}>
+            <View style={styles.nameRow}>
+              <Text style={styles.modelName} numberOfLines={1}>{name}</Text>
+              {isActive && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>ACTIVE</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.familyText}>{family}</Text>
           </View>
+        </View>
+
+        {/* Divider */}
+        <View style={styles.divider} />
+
+        {/* Stats row */}
+        <View style={styles.statsRow}>
+          <StatItem label="Size" value={size} />
+          <View style={styles.statDot} />
+          <StatItem label="Parameters" value={params} />
+          <View style={styles.statDot} />
+          <StatItem label="Quantization" value={quant} />
         </View>
       </View>
     </Pressable>
@@ -44,32 +73,125 @@ function ModelCard({ item, isActive, onDelete }: { item: OllamaModel; isActive: 
         glassEffectStyle="regular"
         colorScheme="dark"
         isInteractive
-        style={cs.glassWrap}
+        style={styles.glassCard}
       >
         {content}
       </GlassView>
     );
   }
 
-  return <View style={cs.fallbackWrap}>{content}</View>;
+  return <View style={styles.fallbackCard}>{content}</View>;
 }
 
-function Tag({ label, value }: { label: string; value: string }) {
+function StatItem({ label, value }: { label: string; value: string }) {
   return (
-    <View className="flex-row items-center gap-1">
-      <Text className="text-[11px] text-white/15">{label}</Text>
-      <Text className="text-[11px] font-medium text-white/40">{value}</Text>
+    <View style={styles.statItem}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{value}</Text>
     </View>
   );
 }
 
-const cs = StyleSheet.create({
-  glassWrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.1)', marginBottom: 10 },
-  glass: { overflow: 'hidden' },
-  glassInner: { backgroundColor: 'rgba(255,255,255,0.02)' },
-  fallbackWrap: { borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.05)', marginBottom: 10 },
-  card: { padding: 16 },
-  cardPressed: { opacity: 0.7 },
+const styles = StyleSheet.create({
+  glassCard: {
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  fallbackCard: {
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.035)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 12,
+  },
+  cardInner: {
+    padding: 16,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  iconWrapActive: {
+    backgroundColor: 'rgba(99,102,241,0.15)',
+  },
+  iconText: {
+    fontSize: 20,
+  },
+  nameCol: {
+    flex: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modelName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    flexShrink: 1,
+  },
+  badge: {
+    backgroundColor: 'rgba(99,102,241,0.18)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(129,140,248,0.9)',
+    letterSpacing: 0.5,
+  },
+  familyText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.3)',
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+  divider: {
+    height: 0.5,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginVertical: 14,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.2)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  statDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginHorizontal: 4,
+  },
 });
 
 export default function ModelsScreen() {
@@ -98,7 +220,7 @@ export default function ModelsScreen() {
   }, [loadModels]);
 
   const handleDelete = (name: string) => {
-    Alert.alert('Delete Model', `Delete "${name}"?`, [
+    Alert.alert('Delete Model', `Delete "${name}"? This frees disk space on the desktop.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive',
@@ -119,9 +241,16 @@ export default function ModelsScreen() {
     <View className="flex-1 bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>
       {/* Summary bar */}
       {models.length > 0 && (
-        <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
-          <Text className="text-[11px] text-white/25">{models.length} model{models.length !== 1 ? 's' : ''}</Text>
-          <Text className="text-[11px] text-white/20">Total: {formatBytes(totalSize)}</Text>
+        <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
+          <View className="flex-row items-center gap-1.5">
+            <Text className="text-[12px] font-semibold text-white/40">
+              {models.length} model{models.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-1.5 rounded-full bg-white/[0.04] px-2.5 py-1">
+            <Text className="text-[11px] text-white/25">Total</Text>
+            <Text className="text-[11px] font-semibold text-white/40">{formatBytes(totalSize)}</Text>
+          </View>
         </View>
       )}
 
@@ -143,12 +272,12 @@ export default function ModelsScreen() {
             </View>
           ) : (
             <View className="items-center">
-              <View className="mb-4 h-16 w-16 items-center justify-center rounded-3xl bg-white/[0.04]">
-                <Text className="text-2xl">🧠</Text>
+              <View className="mb-4 h-20 w-20 items-center justify-center rounded-3xl bg-white/[0.04]">
+                <Text className="text-3xl">🧠</Text>
               </View>
-              <Text className="mb-1 text-base font-semibold text-white/50">No models found</Text>
-              <Text className="text-center text-sm leading-5 text-white/25">
-                {isConnected ? 'Install models from the desktop.' : 'Connect to desktop first.'}
+              <Text className="mb-2 text-[17px] font-semibold text-white/50">No models found</Text>
+              <Text className="text-center text-[14px] leading-5 text-white/25">
+                {isConnected ? 'Install models from the Atlas AI Desktop app.' : 'Connect to your desktop first.'}
               </Text>
             </View>
           )
@@ -161,7 +290,6 @@ export default function ModelsScreen() {
           />
         )}
       />
-
     </View>
   );
 }
