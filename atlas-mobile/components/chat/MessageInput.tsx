@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react';
-import { View, TextInput, Pressable, Text, Platform, StyleSheet } from 'react-native';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { View, TextInput, Pressable, Text, Platform, StyleSheet, Keyboard } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 
 interface Props {
@@ -10,32 +11,60 @@ interface Props {
 
 export function MessageInput({ onSend, onStop, isStreaming }: Props) {
   const [input, setInput] = useState('');
+  const [inputHeight, setInputHeight] = useState(36);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
 
-  const handleSend = () => {
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true),
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false),
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const handleSend = useCallback(() => {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
     onSend(trimmed);
     setInput('');
-  };
+    setInputHeight(36);
+  }, [input, isStreaming, onSend]);
 
   const hasText = input.trim().length > 0;
 
+  const onContentSizeChange = useCallback((e: any) => {
+    const h = e.nativeEvent.contentSize.height;
+    setInputHeight(Math.min(Math.max(h, 36), 100));
+  }, []);
+
+  // When keyboard is open, no bottom padding needed (keyboard fills that space)
+  // When keyboard is closed, use safe area inset for home indicator
+  const bottomPad = keyboardVisible ? 4 : Math.max(insets.bottom, 8);
+
   const InputContent = (
-    <View style={styles.contentWrap}>
+    <View style={[styles.contentWrap, { paddingBottom: bottomPad }]}>
       <View style={styles.inputRow}>
         <TextInput
           ref={inputRef}
           value={input}
           onChangeText={setInput}
+          onContentSizeChange={onContentSizeChange}
           placeholder="Message Atlas AI..."
           placeholderTextColor="rgba(255,255,255,0.2)"
           editable={!isStreaming}
           multiline
           maxLength={4000}
-          style={styles.textInput}
+          style={[styles.textInput, { height: inputHeight }]}
         />
-
         {isStreaming ? (
           <Pressable onPress={onStop} style={styles.stopBtn}>
             <View style={styles.stopIcon} />
@@ -57,11 +86,9 @@ export function MessageInput({ onSend, onStop, isStreaming }: Props) {
 
   if (Platform.OS === 'ios') {
     return (
-      <View style={styles.container}>
-        <BlurView intensity={80} tint="dark" style={styles.glass}>
-          <View style={styles.glassOverlay}>{InputContent}</View>
-        </BlurView>
-      </View>
+      <BlurView intensity={80} tint="dark" style={styles.container}>
+        <View style={styles.glassOverlay}>{InputContent}</View>
+      </BlurView>
     );
   }
 
@@ -73,9 +100,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 0.5,
     borderTopColor: 'rgba(255,255,255,0.06)',
   },
-  glass: {
-    overflow: 'hidden',
-  },
   glassOverlay: {
     backgroundColor: 'rgba(10,10,10,0.4)',
   },
@@ -83,49 +107,46 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a0a',
   },
   contentWrap: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 32,
+    paddingHorizontal: 12,
+    paddingTop: 8,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
     paddingHorizontal: 4,
     paddingVertical: 4,
   },
   textInput: {
     flex: 1,
-    minHeight: 36,
-    maxHeight: 120,
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    fontSize: 15,
+    paddingTop: 8,
+    paddingBottom: 8,
+    fontSize: 16,
     color: '#ffffff',
-    textAlignVertical: 'center',
   },
   stopBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 12,
     backgroundColor: 'rgba(239,68,68,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stopIcon: {
-    width: 14,
-    height: 14,
-    borderRadius: 3,
+    width: 12,
+    height: 12,
+    borderRadius: 2,
     backgroundColor: '#fff',
   },
   sendBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -136,13 +157,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   sendText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
   sendTextActive: {
     color: '#fff',
   },
   sendTextInactive: {
-    color: 'rgba(255,255,255,0.12)',
+    color: 'rgba(255,255,255,0.1)',
   },
 });

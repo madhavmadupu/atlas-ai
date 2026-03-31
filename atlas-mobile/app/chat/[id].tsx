@@ -18,7 +18,6 @@ export default function ChatScreen() {
     if (id) setActiveConversation(id);
   }, [id, setActiveConversation]);
 
-  // Build the display list: real messages + streaming message
   const displayMessages: Message[] = [
     ...messages,
     ...(isStreaming && streamingContent
@@ -34,45 +33,81 @@ export default function ChatScreen() {
       : []),
   ];
 
+  const isEmpty = displayMessages.length === 0 && !isStreaming;
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      className="flex-1 bg-[#0a0a0a]"
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 56 : 0}
+      style={{ flex: 1, backgroundColor: '#0a0a0a' }}
     >
+      {/* Messages */}
       <FlatList
         ref={flatListRef}
         data={displayMessages}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 16, flexGrow: 1, justifyContent: 'flex-end' }}
-        renderItem={({ item }) => (
-          <MessageBubble
-            message={item}
-            isStreaming={item.id === 'streaming'}
-          />
-        )}
-        ListFooterComponent={
-          isStreaming && !streamingContent ? <TypingIndicator /> : null
-        }
-        onContentSizeChange={() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
+        contentContainerStyle={{
+          paddingHorizontal: 12,
+          paddingTop: 12,
+          paddingBottom: 8,
+          ...(isEmpty ? { flexGrow: 1, justifyContent: 'center' as const } : {}),
         }}
-        onLayout={() => {
-          flatListRef.current?.scrollToEnd({ animated: false });
+        renderItem={({ item }) => (
+          <MessageBubble message={item} isStreaming={item.id === 'streaming'} />
+        )}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', paddingHorizontal: 32 }}>
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 18,
+                backgroundColor: 'rgba(99,102,241,0.12)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 16,
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '800', color: 'rgba(129,140,248,0.7)' }}>
+                AI
+              </Text>
+            </View>
+            <Text style={{ fontSize: 17, fontWeight: '600', color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
+              Start a conversation
+            </Text>
+            <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.25)', textAlign: 'center', lineHeight: 20 }}>
+              Type a message below to chat with Atlas AI
+            </Text>
+          </View>
+        }
+        ListFooterComponent={isStreaming && !streamingContent ? <TypingIndicator /> : null}
+        onContentSizeChange={() => {
+          if (displayMessages.length > 0) {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }
         }}
       />
 
+      {/* Error */}
       {error && (
-        <View className="mx-4 mb-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2">
-          <Text className="text-sm text-red-400">{error}</Text>
+        <View
+          style={{
+            marginHorizontal: 12,
+            marginBottom: 4,
+            borderRadius: 12,
+            backgroundColor: 'rgba(239,68,68,0.08)',
+            borderWidth: 0.5,
+            borderColor: 'rgba(239,68,68,0.15)',
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+          }}
+        >
+          <Text style={{ fontSize: 13, color: 'rgba(239,68,68,0.85)' }}>{error}</Text>
         </View>
       )}
 
-      <MessageInput
-        onSend={sendMessage}
-        onStop={stopGeneration}
-        isStreaming={isStreaming}
-      />
+      {/* Input */}
+      <MessageInput onSend={sendMessage} onStop={stopGeneration} isStreaming={isStreaming} />
     </KeyboardAvoidingView>
   );
 }
