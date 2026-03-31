@@ -52,3 +52,4 @@ async function settingsRoutes(fastify) {
         return { success: true };
     });
 }
+//# sourceMappingURL=settings.js.map

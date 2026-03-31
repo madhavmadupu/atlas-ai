@@ -1,5 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
+import path from "path";
 import { healthRoutes } from "./routes/health";
 import { chatRoutes } from "./routes/chat";
 import { conversationRoutes } from "./routes/conversations";
@@ -27,7 +29,8 @@ function getLanIP(): string | null {
 export async function startServer({
   port = 3001,
   host = "0.0.0.0",
-}: { port?: number; host?: string } = {}) {
+  staticDir,
+}: { port?: number; host?: string; staticDir?: string } = {}) {
   // Initialize database
   initDb();
 
@@ -38,12 +41,40 @@ export async function startServer({
     allowedHeaders: ["Content-Type", "Accept", "Cache-Control"],
   });
 
-  // Register routes
+  // Register API routes
   await server.register(healthRoutes, { prefix: "/api" });
   await server.register(chatRoutes, { prefix: "/api" });
   await server.register(conversationRoutes, { prefix: "/api" });
   await server.register(modelsRoutes, { prefix: "/api" });
   await server.register(settingsRoutes, { prefix: "/api" });
+
+  // Serve the static Next.js export (UI)
+  if (staticDir) {
+    await server.register(fastifyStatic, {
+      root: staticDir,
+      prefix: "/",
+      decorateReply: false,
+    });
+
+    // SPA fallback: serve index.html for unmatched routes
+    server.setNotFoundHandler(async (request, reply) => {
+      // Don't intercept API routes
+      if (request.url.startsWith("/api/")) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+
+      // Try to serve the matching HTML file (e.g., /models → models.html)
+      const routeName = request.url.split("?")[0].replace(/^\//, "");
+      if (routeName) {
+        try {
+          return reply.sendFile(routeName + ".html");
+        } catch {
+          // Fall through to index.html
+        }
+      }
+      return reply.sendFile("index.html");
+    });
+  }
 
   await server.listen({ port, host });
 

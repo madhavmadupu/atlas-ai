@@ -3,14 +3,14 @@
     "target": "ES2022",
     "module": "CommonJS",
     "lib": ["ES2022"],
-    "outDir": "dist/server",
-    "rootDir": "server",
+    "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": false
+    "declaration": false,
+    "sourceMap": true
   },
-  "include": ["server/**/*.ts"]
+  "include": ["electron/**/*.ts", "server/**/*.ts"]
 }

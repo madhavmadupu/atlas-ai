@@ -7,6 +7,7 @@ exports.startServer = startServer;
 exports.stopServer = stopServer;
 const fastify_1 = __importDefault(require("fastify"));
 const cors_1 = __importDefault(require("@fastify/cors"));
+const static_1 = __importDefault(require("@fastify/static"));
 const health_1 = require("./routes/health");
 const chat_1 = require("./routes/chat");
 const conversations_1 = require("./routes/conversations");
@@ -29,7 +30,7 @@ function getLanIP() {
     }
     return null;
 }
-async function startServer({ port = 3001, host = "0.0.0.0", } = {}) {
+async function startServer({ port = 3001, host = "0.0.0.0", staticDir, } = {}) {
     // Initialize database
     (0, db_1.initDb)();
     // Register CORS — allow all origins (all requests are local)
@@ -38,12 +39,38 @@ async function startServer({ port = 3001, host = "0.0.0.0", } = {}) {
         methods: ["GET", "POST", "DELETE", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Accept", "Cache-Control"],
     });
-    // Register routes
+    // Register API routes
     await server.register(health_1.healthRoutes, { prefix: "/api" });
     await server.register(chat_1.chatRoutes, { prefix: "/api" });
     await server.register(conversations_1.conversationRoutes, { prefix: "/api" });
     await server.register(models_1.modelsRoutes, { prefix: "/api" });
     await server.register(settings_1.settingsRoutes, { prefix: "/api" });
+    // Serve the static Next.js export (UI)
+    if (staticDir) {
+        await server.register(static_1.default, {
+            root: staticDir,
+            prefix: "/",
+            decorateReply: false,
+        });
+        // SPA fallback: serve index.html for unmatched routes
+        server.setNotFoundHandler(async (request, reply) => {
+            // Don't intercept API routes
+            if (request.url.startsWith("/api/")) {
+                return reply.status(404).send({ error: "Not found" });
+            }
+            // Try to serve the matching HTML file (e.g., /models → models.html)
+            const routeName = request.url.split("?")[0].replace(/^\//, "");
+            if (routeName) {
+                try {
+                    return reply.sendFile(routeName + ".html");
+                }
+                catch {
+                    // Fall through to index.html
+                }
+            }
+            return reply.sendFile("index.html");
+        });
+    }
     await server.listen({ port, host });
     const lanIP = getLanIP();
     console.log(`[Atlas Server] Listening on http://localhost:${port}`);
@@ -56,3 +83,4 @@ async function stopServer() {
     (0, db_1.closeDb)();
     await server.close();
 }
+//# sourceMappingURL=index.js.map

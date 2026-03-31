@@ -117,3 +117,4 @@ async function chatRoutes(fastify) {
         return reply;
     });
 }
+//# sourceMappingURL=chat.js.map

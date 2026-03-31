@@ -1,12 +1,12 @@
-import { app, BrowserWindow, ipcMain, protocol } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import path from "path";
 import { startOllamaSidecar, stopOllamaSidecar } from "./sidecar";
 
-const isDev = process.env.NODE_ENV === "development";
 let mainWindow: BrowserWindow | null = null;
+let serverCleanup: (() => Promise<void>) | null = null;
 
-// Keep reference to server module for cleanup
-let serverModule: { startServer: (opts: any) => Promise<any>; stopServer: () => Promise<void> } | null = null;
+const SERVER_PORT = 3001;
+const SERVER_URL = `http://localhost:${SERVER_PORT}`;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -30,19 +30,8 @@ function createWindow() {
     show: false,
   });
 
-  if (isDev) {
-    mainWindow.loadURL("http://localhost:3000");
-    mainWindow.webContents.openDevTools();
-  } else {
-    // Load static export from atlas-web/out/
-    const indexPath = path.join(
-      app.getAppPath(),
-      "atlas-web",
-      "out",
-      "index.html",
-    );
-    mainWindow.loadFile(indexPath);
-  }
+  // Load UI from the Fastify server (serves both API and static files)
+  mainWindow.loadURL(SERVER_URL);
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
@@ -53,21 +42,8 @@ function createWindow() {
   });
 }
 
-// Handle navigation for static export (SPA-style)
-function setupProtocolHandler() {
-  protocol.handle("file", (request) => {
-    const url = request.url;
-    // Let normal file requests through
-    return protocol.handle("file", request as any) as any;
-  });
-}
-
-// Register IPC handlers for window controls
 function registerIPC() {
-  ipcMain.handle("window:minimize", () => {
-    mainWindow?.minimize();
-  });
-
+  ipcMain.handle("window:minimize", () => mainWindow?.minimize());
   ipcMain.handle("window:maximize", () => {
     if (mainWindow?.isMaximized()) {
       mainWindow.unmaximize();
@@ -75,68 +51,76 @@ function registerIPC() {
       mainWindow?.maximize();
     }
   });
+  ipcMain.handle("window:close", () => mainWindow?.close());
+  ipcMain.handle("system:getInfo", () => ({
+    version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+  }));
+  ipcMain.handle("system:getPlatform", () => process.platform);
+}
 
-  ipcMain.handle("window:close", () => {
-    mainWindow?.close();
-  });
+async function startApiServer(): Promise<void> {
+  try {
+    // Set DB path to Electron's user data directory
+    const { setDbDirectory } = require(
+      path.join(__dirname, "..", "server", "db.js"),
+    );
+    setDbDirectory(app.getPath("userData"));
 
-  ipcMain.handle("system:getInfo", () => {
-    return {
-      version: app.getVersion(),
-      platform: process.platform,
-      arch: process.arch,
-    };
-  });
+    // Resolve static files directory (Next.js export output)
+    const staticDir = path.join(__dirname, "..", "..", "atlas-web", "out");
 
-  ipcMain.handle("system:getPlatform", () => {
-    return process.platform;
-  });
+    // Start Fastify server — serves both API and static UI
+    const { startServer, stopServer } = require(
+      path.join(__dirname, "..", "server", "index.js"),
+    );
+    await startServer({ port: SERVER_PORT, host: "0.0.0.0", staticDir });
+    serverCleanup = stopServer;
+    console.log("[Atlas] API + UI server started on port", SERVER_PORT);
+  } catch (err) {
+    console.error("[Atlas] Failed to start server:", err);
+  }
 }
 
 async function bootstrap() {
-  // 1. Start Ollama sidecar
+  console.log("[Atlas] Starting Atlas AI Desktop...");
+  console.log("[Atlas] User data:", app.getPath("userData"));
+
+  // 1. Start Ollama (detect system install or bundled)
   await startOllamaSidecar();
 
-  // 2. Start Fastify server
-  try {
-    serverModule = require("../dist/server/index");
-    await (serverModule as any).startServer({ port: 3001, host: "0.0.0.0" });
-    console.log("[Atlas] Fastify server started on port 3001");
-  } catch (err) {
-    console.error("[Atlas] Failed to start Fastify server:", err);
-  }
+  // 2. Start API + static file server
+  await startApiServer();
 
   // 3. Register IPC handlers
   registerIPC();
 
-  // 4. Create window
+  // 4. Create window — loads UI from http://localhost:3001
   createWindow();
+
+  console.log("[Atlas] All systems ready.");
 }
 
 app.whenReady().then(bootstrap);
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    cleanup();
     app.quit();
   }
 });
 
 app.on("activate", () => {
-  if (mainWindow === null) {
-    createWindow();
-  }
+  if (mainWindow === null) createWindow();
 });
 
-app.on("before-quit", cleanup);
-
-async function cleanup() {
-  try {
-    if (serverModule) {
-      await (serverModule as any).stopServer();
+app.on("before-quit", async () => {
+  if (serverCleanup) {
+    try {
+      await serverCleanup();
+    } catch {
+      // Ignore cleanup errors
     }
-  } catch {
-    // Ignore cleanup errors
   }
   await stopOllamaSidecar();
-}
+});

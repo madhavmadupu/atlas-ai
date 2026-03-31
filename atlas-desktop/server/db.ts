@@ -1,37 +1,36 @@
 import Database from "better-sqlite3";
 import path from "path";
-import { app } from "electron";
 import fs from "fs";
 
 let db: Database.Database | null = null;
+let dbPath: string | null = null;
+
+/**
+ * Set the database directory. Must be called before initDb().
+ * In Electron, pass app.getPath('userData').
+ */
+export function setDbDirectory(dir: string) {
+  fs.mkdirSync(dir, { recursive: true });
+  dbPath = path.join(dir, "atlas.db");
+}
 
 function getDbPath(): string {
-  // Use Electron's app data directory
-  let userDataPath: string;
-  try {
-    userDataPath = app.getPath("userData");
-  } catch {
-    // Fallback if Electron app is not ready
-    const home = process.env.HOME || process.env.USERPROFILE || "";
-    if (process.platform === "win32") {
-      userDataPath = path.join(
-        process.env.APPDATA || home,
-        "Atlas AI",
-      );
-    } else if (process.platform === "darwin") {
-      userDataPath = path.join(
-        home,
-        "Library",
-        "Application Support",
-        "Atlas AI",
-      );
-    } else {
-      userDataPath = path.join(home, ".config", "Atlas AI");
-    }
+  if (dbPath) return dbPath;
+
+  // Fallback: use platform-specific default
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  let dir: string;
+  if (process.platform === "win32") {
+    dir = path.join(process.env.APPDATA || home, "Atlas AI");
+  } else if (process.platform === "darwin") {
+    dir = path.join(home, "Library", "Application Support", "Atlas AI");
+  } else {
+    dir = path.join(home, ".config", "Atlas AI");
   }
 
-  fs.mkdirSync(userDataPath, { recursive: true });
-  return path.join(userDataPath, "atlas.db");
+  fs.mkdirSync(dir, { recursive: true });
+  dbPath = path.join(dir, "atlas.db");
+  return dbPath;
 }
 
 function runMigrations(database: Database.Database) {
@@ -66,15 +65,15 @@ function runMigrations(database: Database.Database) {
 export function initDb(): Database.Database {
   if (db) return db;
 
-  const dbPath = getDbPath();
-  db = new Database(dbPath);
+  const resolvedPath = getDbPath();
+  db = new Database(resolvedPath);
 
   // Enable WAL mode and foreign keys
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
   runMigrations(db);
-  console.log("[DB] Initialized at:", dbPath);
+  console.log("[DB] Initialized at:", resolvedPath);
   return db;
 }
 
@@ -95,9 +94,7 @@ export function closeDb() {
 export const conversations = {
   findMany: () => {
     return getDb()
-      .prepare(
-        "SELECT * FROM conversations ORDER BY updated_at DESC",
-      )
+      .prepare("SELECT * FROM conversations ORDER BY updated_at DESC")
       .all();
   },
 

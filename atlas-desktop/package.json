@@ -5,29 +5,27 @@
   "description": "Atlas AI — Private, offline AI assistant",
   "main": "dist/electron/main.js",
   "scripts": {
-    "dev:web": "cd atlas-web && npm run dev",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
     "build:web": "cd atlas-web && npm run build",
-    "dev:electron": "npm run compile:electron && electron .",
-    "dev": "concurrently \"npm run dev:web\" \"wait-on http://localhost:3000 && npm run dev:electron\"",
-    "compile:electron": "tsc -p tsconfig.electron.json",
-    "compile:server": "tsc -p tsconfig.server.json",
-    "build": "npm run build:web && npm run compile:electron && npm run compile:server",
+    "compile": "tsc",
+    "build": "npm run build:web && npm run compile",
     "start": "electron .",
+    "dev": "npm run build && electron .",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@fastify/cors": "^10.1.0",
+    "@fastify/static": "^7.0.4",
     "better-sqlite3": "^11.0.0",
-    "fastify": "^4.28.0",
-    "@fastify/cors": "^9.0.0"
+    "fastify": "^4.28.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.0.0",
-    "concurrently": "^9.0.0",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
-    "typescript": "^5.5.0",
-    "wait-on": "^8.0.0"
+    "electron-rebuild": "^3.2.9",
+    "typescript": "^5.5.0"
   },
   "build": {
     "appId": "com.atlas-ai.desktop",
@@ -38,6 +36,7 @@
     "files": [
       "dist/**/*",
       "atlas-web/out/**/*",
+      "node_modules/**/*",
       "package.json"
     ],
     "win": {

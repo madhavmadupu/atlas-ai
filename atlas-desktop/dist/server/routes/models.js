@@ -40,3 +40,4 @@ async function modelsRoutes(fastify) {
         return { success: true };
     });
 }
+//# sourceMappingURL=models.js.map

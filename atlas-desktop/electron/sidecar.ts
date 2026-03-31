@@ -1,29 +1,57 @@
-import { ChildProcess, spawn } from "child_process";
+import { ChildProcess, spawn, execSync } from "child_process";
 import path from "path";
 import { app } from "electron";
 import fs from "fs";
 
 let ollamaProcess: ChildProcess | null = null;
 
-function getOllamaBinaryPath(): string {
-  const platform = process.platform;
-  const arch = process.arch;
+/**
+ * Find the Ollama binary — tries system PATH first, then bundled.
+ */
+function findOllamaBinary(): string | null {
+  // 1. Try system-installed Ollama (most common on user machines)
+  try {
+    const cmd = process.platform === "win32" ? "where ollama" : "which ollama";
+    const systemPath = execSync(cmd, { encoding: "utf-8" }).trim().split("\n")[0];
+    if (systemPath && fs.existsSync(systemPath)) {
+      return systemPath;
+    }
+  } catch {
+    // Not in PATH
+  }
+
+  // 2. Windows: check common install locations
+  if (process.platform === "win32") {
+    const candidates = [
+      path.join(process.env.LOCALAPPDATA || "", "Programs", "Ollama", "ollama.exe"),
+      path.join(process.env.PROGRAMFILES || "", "Ollama", "ollama.exe"),
+      path.join(process.env.USERPROFILE || "", "AppData", "Local", "Programs", "Ollama", "ollama.exe"),
+    ];
+    for (const p of candidates) {
+      if (p && fs.existsSync(p)) return p;
+    }
+  }
+
+  // 3. Try bundled binary (for packaged distribution)
   const resourcesPath = app.isPackaged
     ? path.join(process.resourcesPath, "ollama")
-    : path.join(app.getAppPath(), "..", "resources", "ollama");
+    : path.join(app.getAppPath(), "resources", "ollama");
 
   const binaryName =
-    platform === "win32"
+    process.platform === "win32"
       ? "ollama.exe"
-      : platform === "darwin"
-        ? arch === "arm64"
+      : process.platform === "darwin"
+        ? process.arch === "arm64"
           ? "ollama-darwin-arm64"
           : "ollama-darwin-amd64"
-        : arch === "arm64"
+        : process.arch === "arm64"
           ? "ollama-linux-arm64"
           : "ollama-linux-amd64";
 
-  return path.join(resourcesPath, binaryName);
+  const bundledPath = path.join(resourcesPath, binaryName);
+  if (fs.existsSync(bundledPath)) return bundledPath;
+
+  return null;
 }
 
 function getModelsDir(): string {
@@ -46,38 +74,30 @@ export async function pingOllama(): Promise<boolean> {
 }
 
 export async function startOllamaSidecar(): Promise<void> {
-  // In dev, assume Ollama is already running externally
-  if (process.env.NODE_ENV === "development") {
-    const running = await pingOllama();
-    if (running) {
-      console.log("[Ollama] Already running on localhost:11434");
-    } else {
-      console.log(
-        "[Ollama] Not detected on localhost:11434 — please start Ollama manually",
-      );
-    }
-    return;
-  }
-
-  // Check if already running
+  // Check if Ollama is already running (user started it, or system service)
   const alreadyRunning = await pingOllama();
   if (alreadyRunning) {
-    console.log("[Ollama] Already running");
+    console.log("[Ollama] Already running on localhost:11434");
     return;
   }
 
-  const binaryPath = getOllamaBinaryPath();
-  if (!fs.existsSync(binaryPath)) {
+  // Find the binary
+  const binaryPath = findOllamaBinary();
+  if (!binaryPath) {
     console.error(
-      "[Ollama] Binary not found at:",
-      binaryPath,
-      "— user must install Ollama separately",
+      "[Ollama] Not found. Please install Ollama from https://ollama.com",
     );
     return;
   }
 
+  console.log("[Ollama] Starting from:", binaryPath);
+
   if (process.platform !== "win32") {
-    fs.chmodSync(binaryPath, 0o755);
+    try {
+      fs.chmodSync(binaryPath, 0o755);
+    } catch {
+      // May not have permission, that's fine if it's a system binary
+    }
   }
 
   return new Promise((resolve) => {
@@ -89,7 +109,17 @@ export async function startOllamaSidecar(): Promise<void> {
         OLLAMA_MODELS: getModelsDir(),
       },
       stdio: ["ignore", "pipe", "pipe"],
+      // Detach on Windows so it doesn't block quit
+      ...(process.platform === "win32" ? { windowsHide: true } : {}),
     });
+
+    let resolved = false;
+    const finish = () => {
+      if (!resolved) {
+        resolved = true;
+        resolve();
+      }
+    };
 
     ollamaProcess.stdout?.on("data", (data: Buffer) => {
       const line = data.toString();
@@ -98,30 +128,63 @@ export async function startOllamaSidecar(): Promise<void> {
         line.includes("Listening on") ||
         line.includes("127.0.0.1:11434")
       ) {
-        resolve();
+        finish();
       }
     });
 
     ollamaProcess.stderr?.on("data", (data: Buffer) => {
       const line = data.toString();
-      if (line.includes("level=ERROR") || line.includes("fatal")) {
-        console.error("[Ollama ERROR]", line.trim());
+      // Ollama logs to stderr by default
+      console.log("[Ollama]", line.trim());
+      if (
+        line.includes("Listening on") ||
+        line.includes("127.0.0.1:11434")
+      ) {
+        finish();
       }
     });
 
     ollamaProcess.on("error", (err) => {
       console.error("[Ollama] Failed to spawn:", err.message);
-      resolve(); // Don't block app startup
+      finish();
     });
 
-    // Fallback timeout — don't wait forever
-    setTimeout(resolve, 5000);
+    ollamaProcess.on("exit", (code) => {
+      console.log("[Ollama] Process exited with code:", code);
+      ollamaProcess = null;
+      finish();
+    });
+
+    // Fallback: don't block startup forever
+    // Poll for readiness instead of just timing out
+    const pollReady = setInterval(async () => {
+      if (await pingOllama()) {
+        clearInterval(pollReady);
+        finish();
+      }
+    }, 500);
+
+    setTimeout(() => {
+      clearInterval(pollReady);
+      finish();
+    }, 10000);
   });
 }
 
 export async function stopOllamaSidecar(): Promise<void> {
   if (!ollamaProcess) return;
-  ollamaProcess.kill("SIGTERM");
+
+  if (process.platform === "win32") {
+    // On Windows, SIGTERM doesn't work well on child processes
+    try {
+      ollamaProcess.kill();
+    } catch {
+      // Already dead
+    }
+  } else {
+    ollamaProcess.kill("SIGTERM");
+  }
+
   ollamaProcess = null;
   console.log("[Ollama] Sidecar stopped");
 }

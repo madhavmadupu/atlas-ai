@@ -29,3 +29,4 @@ async function healthRoutes(fastify) {
         return { status: running ? "running" : "offline" };
     });
 }
+//# sourceMappingURL=health.js.map

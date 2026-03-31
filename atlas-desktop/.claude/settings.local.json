@@ -9,7 +9,11 @@
       "Bash(curl -sL \"https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZhrib2Bg-4.ttf\" -o C:/Users/madha/code/projects/atlas-ai/atlas-desktop/atlas-web/app/fonts/Inter-Variable.ttf)",
       "Bash(npm run:*)",
       "Bash(ls C:/Users/madha/code/projects/atlas-ai/atlas-desktop/atlas-web/out/*.html)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(cd:*)",
+      "Bash(npx electron-rebuild:*)",
+      "Bash(curl -s http://localhost:3001/api/models)",
+      "Bash(node -e \"const p = require\\(''./node_modules/@fastify/static/package.json''\\); console.log\\(''static:'', p.version\\); const c = require\\(''./node_modules/@fastify/cors/package.json''\\); console.log\\(''cors:'', c.version\\); const f = require\\(''./node_modules/fastify/package.json''\\); console.log\\(''fastify:'', f.version\\)\")"
     ]
   }
 }

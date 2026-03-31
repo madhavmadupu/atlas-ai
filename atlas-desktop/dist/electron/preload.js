@@ -20,3 +20,4 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
         return () => electron_1.ipcRenderer.removeListener("system:ollamaStatus", handler);
     },
 });
+//# sourceMappingURL=preload.js.map

@@ -1,6 +1,7 @@
 import type { RecommendedModel, Settings } from "./types";
 
-export const API_BASE = "http://localhost:3001/api";
+// Same origin — UI and API both served from Fastify on port 3001
+export const API_BASE = "/api";
 export const OLLAMA_BASE = "http://localhost:11434";
 
 export const DEFAULT_MODEL = "llama3.2:3b";
