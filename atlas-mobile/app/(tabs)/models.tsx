@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, FlatList, Pressable, RefreshControl, Alert, Platform, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useConnectionStore } from '@/store/connection.store';
 import { routes } from '@/lib/api';
@@ -112,9 +113,10 @@ export default function ModelsScreen() {
   };
 
   const totalSize = models.reduce((sum, m) => sum + m.size, 0);
+  const insets = useSafeAreaInsets();
 
   return (
-    <View className="flex-1 bg-[#0a0a0a]">
+    <View className="flex-1 bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>
       {/* Summary bar */}
       {models.length > 0 && (
         <View className="flex-row items-center justify-between px-5 pb-2 pt-1">

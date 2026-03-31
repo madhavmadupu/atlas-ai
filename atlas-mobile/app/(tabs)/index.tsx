@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, Pressable, Alert, RefreshControl, TextInput } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useChatStore } from '@/store/chat.store';
 import { useConnectionStore } from '@/store/connection.store';
@@ -104,8 +105,10 @@ export default function ChatListScreen() {
     );
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View className="flex-1 bg-[#0a0a0a]">
+    <View className="flex-1 bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>
       {/* Status + actions bar */}
       <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
         <View className="flex-row items-center gap-1.5">

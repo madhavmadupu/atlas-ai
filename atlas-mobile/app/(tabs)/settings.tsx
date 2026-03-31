@@ -10,6 +10,7 @@ import {
   Platform,
   StyleSheet,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useConnectionStore } from '@/store/connection.store';
 import { useChatStore } from '@/store/chat.store';
@@ -88,8 +89,10 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View className="flex-1 bg-[#0a0a0a]">
+    <View className="flex-1 bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 20 }}>
         {/* Connection Status */}
         <GlassSection>
