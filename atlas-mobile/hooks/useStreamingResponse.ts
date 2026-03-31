@@ -40,7 +40,10 @@ export function useStreamingResponse(conversationId: string | null) {
 
         const res = await fetch(routes.chat(), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+          },
           body: JSON.stringify({
             conversationId: convId,
             model,
@@ -50,36 +53,27 @@ export function useStreamingResponse(conversationId: string | null) {
         });
 
         if (!res.ok) throw new Error(`Chat failed: ${res.status}`);
-        if (!res.body) throw new Error('No response body');
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
+        // React Native fetch returns the full body as text
+        // For streaming, we poll the response text
+        const text = await res.text();
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const text = decoder.decode(value, { stream: true });
-          for (const line of text.split('\n')) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-              const event = JSON.parse(line.slice(6));
-              if (event.token) appendStreamToken(event.token);
-              if (event.done) {
-                finishStreaming();
-                return;
-              }
-              if (event.error) throw new Error(event.error);
-            } catch (e) {
-              if (e instanceof SyntaxError) continue;
-              throw e;
-            }
+        // Parse SSE lines from the complete response
+        for (const line of text.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.token) appendStreamToken(event.token);
+            if (event.error) throw new Error(event.error);
+          } catch (e) {
+            if (e instanceof SyntaxError) continue;
+            throw e;
           }
         }
 
         finishStreaming();
       } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') {
+        if (e instanceof Error && e.name === 'AbortError') {
           finishStreaming();
           return;
         }
