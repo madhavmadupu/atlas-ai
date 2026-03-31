@@ -16,12 +16,9 @@ function Dot({ delay }: { delay: number }) {
     opacity.value = withDelay(
       delay,
       withRepeat(
-        withSequence(
-          withTiming(1, { duration: 400 }),
-          withTiming(0.3, { duration: 400 }),
-        ),
-        -1,
-      ),
+        withSequence(withTiming(1, { duration: 400 }), withTiming(0.3, { duration: 400 })),
+        -1
+      )
     );
   }, [delay, opacity]);
 

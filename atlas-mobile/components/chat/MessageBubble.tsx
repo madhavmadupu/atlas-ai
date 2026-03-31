@@ -19,8 +19,7 @@ export function MessageBubble({ message, isStreaming }: Props) {
       <View
         className={`max-w-[85%] rounded-2xl px-4 py-3 ${
           isUser ? 'rounded-tr-sm bg-indigo-600' : 'rounded-tl-sm bg-white/5'
-        }`}
-      >
+        }`}>
         <Text className={`text-sm leading-6 ${isUser ? 'text-white' : 'text-white/90'}`}>
           {message.content}
           {isStreaming && '▎'}

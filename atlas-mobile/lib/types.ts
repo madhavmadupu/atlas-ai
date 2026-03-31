@@ -33,3 +33,5 @@ export interface StreamEvent {
   done?: boolean;
   error?: string;
 }
+
+export type LocalModelSource = 'huggingface' | 'manual';

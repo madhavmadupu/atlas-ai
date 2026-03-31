@@ -2,6 +2,7 @@ import { useRef, useCallback } from 'react';
 import { useChatStore } from '@/store/chat.store';
 import { useConnectionStore } from '@/store/connection.store';
 import { routes } from '@/lib/api';
+import { localLlamaEngine } from '@/lib/local-llama-engine';
 
 export function useStreamingResponse(conversationId: string | null) {
   const abortRef = useRef<AbortController | null>(null);
@@ -17,11 +18,13 @@ export function useStreamingResponse(conversationId: string | null) {
   } = useChatStore();
 
   const defaultModel = useConnectionStore((s) => s.defaultModel);
+  const inferenceProvider = useConnectionStore((s) => s.inferenceProvider);
+  const localModelPath = useConnectionStore((s) => s.localModelPath);
 
   const sendMessage = useCallback(
     async (content: string) => {
       let convId = conversationId;
-      const model = defaultModel ?? 'llama3.2:3b';
+      const model = inferenceProvider === 'local' ? 'local' : (defaultModel ?? 'llama3.2:3b');
 
       if (!convId) {
         convId = await createConversation(model);
@@ -36,42 +39,53 @@ export function useStreamingResponse(conversationId: string | null) {
       ];
 
       try {
-        abortRef.current = new AbortController();
-
-        const res = await fetch(routes.chat(), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'text/event-stream',
-          },
-          body: JSON.stringify({
-            conversationId: convId,
-            model,
-            messages: allMessages,
-          }),
-          signal: abortRef.current.signal,
-        });
-
-        if (!res.ok) throw new Error(`Chat failed: ${res.status}`);
-
-        // React Native fetch returns the full body as text
-        // For streaming, we poll the response text
-        const text = await res.text();
-
-        // Parse SSE lines from the complete response
-        for (const line of text.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-            if (event.token) appendStreamToken(event.token);
-            if (event.error) throw new Error(event.error);
-          } catch (e) {
-            if (e instanceof SyntaxError) continue;
-            throw e;
+        if (inferenceProvider === 'local') {
+          if (!localModelPath) {
+            throw new Error(
+              'No local model selected. Go to Settings and set a local GGUF model path (file://...).'
+            );
           }
-        }
 
-        finishStreaming();
+          await localLlamaEngine.chat(localModelPath, allMessages, appendStreamToken);
+          finishStreaming();
+        } else {
+          abortRef.current = new AbortController();
+
+          const res = await fetch(routes.chat(), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'text/event-stream',
+            },
+            body: JSON.stringify({
+              conversationId: convId,
+              model,
+              messages: allMessages,
+            }),
+            signal: abortRef.current.signal,
+          });
+
+          if (!res.ok) throw new Error(`Chat failed: ${res.status}`);
+
+          // React Native fetch returns the full body as text
+          // For streaming, we poll the response text
+          const text = await res.text();
+
+          // Parse SSE lines from the complete response
+          for (const line of text.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const event = JSON.parse(line.slice(6));
+              if (event.token) appendStreamToken(event.token);
+              if (event.error) throw new Error(event.error);
+            } catch (e) {
+              if (e instanceof SyntaxError) continue;
+              throw e;
+            }
+          }
+
+          finishStreaming();
+        }
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') {
           finishStreaming();
@@ -85,6 +99,8 @@ export function useStreamingResponse(conversationId: string | null) {
     [
       conversationId,
       defaultModel,
+      inferenceProvider,
+      localModelPath,
       messages,
       addUserMessage,
       startStreaming,
@@ -92,12 +108,16 @@ export function useStreamingResponse(conversationId: string | null) {
       finishStreaming,
       setError,
       createConversation,
-    ],
+    ]
   );
 
   const stopGeneration = useCallback(() => {
+    if (inferenceProvider === 'local') {
+      localLlamaEngine.stop();
+      return;
+    }
     abortRef.current?.abort();
-  }, []);
+  }, [inferenceProvider]);
 
   return { sendMessage, stopGeneration };
 }

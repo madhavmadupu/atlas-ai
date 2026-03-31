@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useConnectionStore } from '@/store/connection.store';
 
@@ -29,7 +37,9 @@ export default function ConnectScreen() {
     if (success) {
       router.replace('/chat');
     } else {
-      setError('Could not connect. Make sure Atlas AI Desktop is running and both devices are on the same Wi-Fi network.');
+      setError(
+        'Could not connect. Make sure Atlas AI Desktop is running and both devices are on the same Wi-Fi network.'
+      );
     }
 
     setIsConnecting(false);
@@ -38,8 +48,7 @@ export default function ConnectScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-[#0a0a0a]"
-    >
+      className="flex-1 bg-[#0a0a0a]">
       <View className="flex-1 justify-center px-6">
         {/* Header */}
         <View className="mb-10 items-center">
@@ -48,7 +57,8 @@ export default function ConnectScreen() {
           </View>
           <Text className="mb-2 text-2xl font-bold text-white">Connect to Desktop</Text>
           <Text className="text-center text-sm leading-5 text-white/50">
-            Enter the IP address shown in your Atlas AI Desktop app. Both devices must be on the same Wi-Fi network.
+            Enter the IP address shown in your Atlas AI Desktop app. Both devices must be on the
+            same Wi-Fi network.
           </Text>
         </View>
 
@@ -95,8 +105,7 @@ export default function ConnectScreen() {
           disabled={isConnecting}
           className={`items-center rounded-xl py-4 ${
             isConnecting ? 'bg-indigo-600/50' : 'bg-indigo-600 active:bg-indigo-700'
-          }`}
-        >
+          }`}>
           {isConnecting ? (
             <View className="flex-row items-center gap-2">
               <ActivityIndicator color="#ffffff" size="small" />
@@ -109,7 +118,8 @@ export default function ConnectScreen() {
 
         {/* Help text */}
         <Text className="mt-6 text-center text-xs leading-4 text-white/30">
-          You can find the IP address in Atlas AI Desktop under Settings or in the title bar. The default port is 3001.
+          You can find the IP address in Atlas AI Desktop under Settings or in the title bar. The
+          default port is 3001.
         </Text>
       </View>
     </KeyboardAvoidingView>

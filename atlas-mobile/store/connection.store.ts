@@ -1,10 +1,16 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 interface ConnectionState {
   desktopIP: string | null;
   desktopPort: number;
   isConnected: boolean;
   defaultModel: string | null;
+  inferenceProvider: 'desktop' | 'local';
+  localModelPath: string | null;
+  localModelName: string | null;
+  huggingFaceToken: string | null;
 }
 
 interface ConnectionActions {
@@ -12,66 +18,104 @@ interface ConnectionActions {
   checkConnection: () => Promise<boolean>;
   disconnect: () => void;
   setEndpoint: (ip: string, port: number) => void;
+  setInferenceProvider: (provider: 'desktop' | 'local') => void;
+  setLocalModel: (model: { path: string; name?: string | null } | null) => void;
+  setHuggingFaceToken: (token: string | null) => void;
 }
 
 export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
-  (set, get) => ({
-    desktopIP: '192.168.0.40',
-    desktopPort: 3001,
-    isConnected: false,
-    defaultModel: null,
+  persist(
+    (set, get) => ({
+      desktopIP: null,
+      desktopPort: 3001,
+      isConnected: false,
+      defaultModel: null,
+      inferenceProvider: 'local',
+      localModelPath: null,
+      localModelName: null,
+      huggingFaceToken: null,
 
-    connectToDesktop: async (ip, port) => {
-      const baseUrl = `http://${ip}:${port}`;
-      try {
-        const healthRes = await fetch(`${baseUrl}/api/health`);
-        if (!healthRes.ok) return false;
-        const health = await healthRes.json();
-        if (!health.status) return false;
-
-        let firstModel: string | null = null;
+      connectToDesktop: async (ip, port) => {
+        const baseUrl = `http://${ip}:${port}`;
         try {
-          const modelsRes = await fetch(`${baseUrl}/api/models`);
-          if (modelsRes.ok) {
-            const models = await modelsRes.json();
-            firstModel = models[0]?.name ?? null;
+          const healthRes = await fetch(`${baseUrl}/api/health`);
+          if (!healthRes.ok) return false;
+          const health = await healthRes.json();
+          if (!health.status) return false;
+
+          let firstModel: string | null = null;
+          try {
+            const modelsRes = await fetch(`${baseUrl}/api/models`);
+            if (modelsRes.ok) {
+              const models = await modelsRes.json();
+              firstModel = models[0]?.name ?? null;
+            }
+          } catch {
+            // Models fetch is optional
           }
+
+          set({
+            desktopIP: ip,
+            desktopPort: port,
+            isConnected: true,
+            defaultModel: firstModel,
+          });
+          return true;
         } catch {
-          // Models fetch is optional
+          return false;
         }
+      },
 
+      checkConnection: async () => {
+        const { desktopIP, desktopPort } = get();
+        if (!desktopIP) return false;
+        try {
+          const res = await fetch(`http://${desktopIP}:${desktopPort}/api/health`);
+          const ok = res.ok;
+          set({ isConnected: ok });
+          return ok;
+        } catch {
+          set({ isConnected: false });
+          return false;
+        }
+      },
+
+      disconnect: () => {
+        set({ desktopIP: null, isConnected: false, defaultModel: null });
+      },
+
+      setEndpoint: (ip, port) => {
+        set({ desktopIP: ip, desktopPort: port, isConnected: false });
+      },
+
+      setInferenceProvider: (provider) => {
+        set({ inferenceProvider: provider });
+      },
+
+      setLocalModel: (model) => {
         set({
-          desktopIP: ip,
-          desktopPort: port,
-          isConnected: true,
-          defaultModel: firstModel,
+          localModelPath: model?.path ?? null,
+          localModelName: model?.name ?? null,
         });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-
-    checkConnection: async () => {
-      const { desktopIP, desktopPort } = get();
-      if (!desktopIP) return false;
-      try {
-        const res = await fetch(`http://${desktopIP}:${desktopPort}/api/health`);
-        const ok = res.ok;
-        set({ isConnected: ok });
-        return ok;
-      } catch {
-        set({ isConnected: false });
-        return false;
-      }
-    },
-
-    disconnect: () => {
-      set({ desktopIP: null, isConnected: false, defaultModel: null });
-    },
-
-    setEndpoint: (ip, port) => {
-      set({ desktopIP: ip, desktopPort: port, isConnected: false });
-    },
-  }),
+      },
+      setHuggingFaceToken: (token) => {
+        set({ huggingFaceToken: token });
+      },
+    }),
+    {
+      name: '@atlas/connection',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        desktopIP: state.desktopIP,
+        desktopPort: state.desktopPort,
+        inferenceProvider: state.inferenceProvider,
+        localModelPath: state.localModelPath,
+        localModelName: state.localModelName,
+        huggingFaceToken: state.huggingFaceToken,
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.checkConnection?.();
+      },
+    }
+  )
 );

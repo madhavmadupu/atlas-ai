@@ -1,0 +1,92 @@
+import { initLlama } from 'llama.rn';
+import type { MessageRole } from '@/lib/types';
+
+type ChatMessage = { role: MessageRole; content: string };
+
+const STOP_WORDS = [
+  '</s>',
+  '<|end|>',
+  '<|eot_id|>',
+  '<|end_of_text|>',
+  '<|im_end|>',
+  '<|EOT|>',
+  '<|END_OF_TURN_TOKEN|>',
+  '<|end_of_turn|>',
+  '<|endoftext|>',
+];
+
+type LlamaContext = Awaited<ReturnType<typeof initLlama>>;
+
+class LocalLlamaEngine {
+  private ctx: LlamaContext | null = null;
+  private modelPath: string | null = null;
+  private stopActive: (() => Promise<void> | void) | null = null;
+
+  async ensureInitialized(modelPath: string) {
+    if (this.ctx && this.modelPath === modelPath) return;
+    await this.dispose();
+
+    // llama.rn expects a file URI (file://...) for local files.
+    // `modelPath` should already be a valid URI.
+    this.ctx = await initLlama({
+      model: modelPath,
+      n_ctx: 2048,
+      n_parallel: 1,
+      // Try GPU where available; it will fall back if unsupported.
+      n_gpu_layers: 99,
+      use_mlock: true,
+    });
+    this.modelPath = modelPath;
+
+    // Use parallel mode to get a per-request stop() handle.
+    await this.ctx.parallel.configure({ n_parallel: 1, n_batch: 512 });
+  }
+
+  async chat(
+    modelPath: string,
+    messages: ChatMessage[],
+    onToken: (token: string) => void
+  ): Promise<void> {
+    await this.ensureInitialized(modelPath);
+    if (!this.ctx) throw new Error('Local model not initialized');
+
+    const req = await this.ctx.parallel.completion(
+      {
+        messages,
+        n_predict: 512,
+        stop: STOP_WORDS,
+      },
+      (_requestId: number, data: { token?: string }) => {
+        if (data.token) onToken(data.token);
+      }
+    );
+
+    this.stopActive = req.stop;
+    try {
+      await req.promise;
+    } finally {
+      this.stopActive = null;
+    }
+  }
+
+  async stop() {
+    const stopFn = this.stopActive;
+    this.stopActive = null;
+    await stopFn?.();
+  }
+
+  async dispose() {
+    this.stopActive = null;
+    try {
+      const releasable = this.ctx as unknown as { release?: () => Promise<void> };
+      await releasable?.release?.();
+    } catch {
+      // ignore
+    } finally {
+      this.ctx = null;
+      this.modelPath = null;
+    }
+  }
+}
+
+export const localLlamaEngine = new LocalLlamaEngine();

@@ -9,7 +9,7 @@ import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import type { Message } from '@/lib/types';
 
 export default function ChatScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, prefill } = useLocalSearchParams<{ id: string; prefill?: string }>();
   const { messages, isStreaming, streamingContent, error, setActiveConversation } = useChatStore();
   const { sendMessage, stopGeneration } = useStreamingResponse(id ?? null);
   const flatListRef = useRef<FlatList<Message>>(null);
@@ -38,22 +38,16 @@ export default function ChatScreen() {
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      className="flex-1 bg-[#0a0a0a]"
-    >
+      className="flex-1 bg-[#0a0a0a]">
       <FlatList
         ref={flatListRef}
         data={displayMessages}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16, flexGrow: 1, justifyContent: 'flex-end' }}
         renderItem={({ item }) => (
-          <MessageBubble
-            message={item}
-            isStreaming={item.id === 'streaming'}
-          />
+          <MessageBubble message={item} isStreaming={item.id === 'streaming'} />
         )}
-        ListFooterComponent={
-          isStreaming && !streamingContent ? <TypingIndicator /> : null
-        }
+        ListFooterComponent={isStreaming && !streamingContent ? <TypingIndicator /> : null}
         onContentSizeChange={() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }}
@@ -72,6 +66,7 @@ export default function ChatScreen() {
         onSend={sendMessage}
         onStop={stopGeneration}
         isStreaming={isStreaming}
+        initialValue={typeof prefill === 'string' ? prefill : undefined}
       />
     </KeyboardAvoidingView>
   );
