@@ -72,3 +72,19 @@
 /atlas-desktop/atlas-web/next-env.d.ts
 
 # -----------------------------------------------------------
+
+# atlas-desktop
+/atlas-desktop/node_modules
+/atlas-desktop/.next
+/atlas-desktop/out
+/atlas-desktop/build
+/atlas-desktop/.DS_Store
+/atlas-desktop/*.pem
+/atlas-desktop/npm-debug.log*
+/atlas-desktop/yarn-debug.log*
+/atlas-desktop/yarn-error.log*
+/atlas-desktop/.pnpm-debug.log*
+/atlas-desktop/.env*
+/atlas-desktop/.vercel
+/atlas-desktop/*.tsbuildinfo
+/atlas-desktop/next-env.d.ts

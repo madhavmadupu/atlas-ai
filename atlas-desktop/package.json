@@ -1,0 +1,62 @@
+{
+  "name": "atlas-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Atlas AI — Private, offline AI assistant",
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "dev:web": "cd atlas-web && npm run dev",
+    "build:web": "cd atlas-web && npm run build",
+    "dev:electron": "npm run compile:electron && electron .",
+    "dev": "concurrently \"npm run dev:web\" \"wait-on http://localhost:3000 && npm run dev:electron\"",
+    "compile:electron": "tsc -p tsconfig.electron.json",
+    "compile:server": "tsc -p tsconfig.server.json",
+    "build": "npm run build:web && npm run compile:electron && npm run compile:server",
+    "start": "electron .",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "fastify": "^4.28.0",
+    "@fastify/cors": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^5.5.0",
+    "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "com.atlas-ai.desktop",
+    "productName": "Atlas AI",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "atlas-web/out/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "resources/icons/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "resources/icons/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "resources/icons/icon.png"
+    },
+    "extraResources": [
+      {
+        "from": "resources/ollama",
+        "to": "ollama"
+      }
+    ]
+  }
+}

@@ -3,7 +3,13 @@
     "allow": [
       "Bash(find /c/Users/madha/code/projects/atlas-ai -type f -name *.json -o -name *.toml -o -name *.yaml -o -name *.yml -o -name README* -o -name package.json -o -name Makefile)",
       "Bash(find /c/Users/madha/code/projects/atlas-ai -not -path */node_modules/* -not -path */.git/* -type d)",
-      "Bash(xargs wc:*)"
+      "Bash(xargs wc:*)",
+      "Bash(grep -l \"breaking\\\\|export\\\\|static\\\\|electron\" C:/Users/madha/code/projects/atlas-ai/atlas-desktop/atlas-web/node_modules/next/dist/docs/01-app/*)",
+      "Bash(npm install:*)",
+      "Bash(curl -sL \"https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZhrib2Bg-4.ttf\" -o C:/Users/madha/code/projects/atlas-ai/atlas-desktop/atlas-web/app/fonts/Inter-Variable.ttf)",
+      "Bash(npm run:*)",
+      "Bash(ls C:/Users/madha/code/projects/atlas-ai/atlas-desktop/atlas-web/out/*.html)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
