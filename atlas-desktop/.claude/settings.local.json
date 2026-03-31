@@ -15,7 +15,17 @@
       "Bash(curl -s http://localhost:3001/api/models)",
       "Bash(node -e \"const p = require\\(''./node_modules/@fastify/static/package.json''\\); console.log\\(''static:'', p.version\\); const c = require\\(''./node_modules/@fastify/cors/package.json''\\); console.log\\(''cors:'', c.version\\); const f = require\\(''./node_modules/fastify/package.json''\\); console.log\\(''fastify:'', f.version\\)\")",
       "Bash(node -e \"const c = require\\(''./node_modules/@fastify/cors/package.json''\\); console.log\\(''cors:'', c.version\\)\")",
-      "Bash(powershell -Command \"New-NetFirewallRule -DisplayName 'Atlas AI Server' -Direction Inbound -Protocol TCP -LocalPort 3001 -Action Allow -Profile Private\" 2>&1)"
+      "Bash(powershell -Command \"New-NetFirewallRule -DisplayName 'Atlas AI Server' -Direction Inbound -Protocol TCP -LocalPort 3001 -Action Allow -Profile Private\" 2>&1)",
+      "Bash(npx expo:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.expo.dev)",
+      "Bash(find /c/Users/madha/code/projects/atlas-ai/atlas-mobile/node_modules -name expo*glass* -type d)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.callstack.com)",
+      "WebFetch(domain:expo.dev)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -r export.*GlassView /c/Users/madha/code/projects/atlas-ai/atlas-mobile/node_modules/expo*)",
+      "WebFetch(domain:medium.com)"
     ]
   }
 }

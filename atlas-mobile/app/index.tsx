@@ -13,7 +13,7 @@ export default function Index() {
       if (desktopIP) {
         const ok = await connectToDesktop(desktopIP, desktopPort);
         if (ok) {
-          router.replace('/chat');
+          router.replace('/(tabs)');
           return;
         }
       }

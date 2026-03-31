@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useChatStore } from "@/store/chat.store";
+import { useModelsStore } from "@/store/models.store";
 
 interface MessageInputProps {
   onSend: (content: string) => void;
@@ -12,13 +13,13 @@ export function MessageInput({ onSend, onStop }: MessageInputProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isStreaming = useChatStore((s) => s.isStreaming);
+  const activeModel = useModelsStore((s) => s.activeModel);
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
     onSend(trimmed);
     setInput("");
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -33,63 +34,59 @@ export function MessageInput({ onSend, onStop }: MessageInputProps) {
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
-    // Auto-resize
     const textarea = e.target;
     textarea.style.height = "auto";
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
   };
 
   return (
-    <div className="border-t border-white/10 bg-[#0a0a0a] p-4">
-      <div className="mx-auto flex max-w-3xl items-end gap-3">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={handleInput}
-          onKeyDown={handleKeyDown}
-          placeholder="Message Atlas AI..."
-          disabled={isStreaming}
-          rows={1}
-          className="flex-1 resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/30 outline-none transition-colors focus:border-white/20 disabled:opacity-50"
-          style={{ minHeight: "44px", maxHeight: "200px" }}
-        />
+    <div className="border-t border-white/[0.06] bg-gradient-to-t from-[#0a0a0a] to-[#0a0a0a]/80 px-4 pb-4 pt-3 backdrop-blur-xl">
+      <div className="mx-auto max-w-3xl">
+        <div className="flex items-end gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-2 transition-colors focus-within:border-white/15 focus-within:bg-white/[0.05]">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            placeholder="Message Atlas AI..."
+            disabled={isStreaming}
+            rows={1}
+            className="flex-1 resize-none bg-transparent px-3 py-2 text-[14px] text-white placeholder-white/25 outline-none disabled:opacity-40"
+            style={{ minHeight: "36px", maxHeight: "200px" }}
+          />
 
-        {isStreaming ? (
-          <button
-            onClick={onStop}
-            className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-red-600 text-white transition-colors hover:bg-red-700"
-            title="Stop generating"
-          >
-            <svg
-              className="h-4 w-4"
-              fill="currentColor"
-              viewBox="0 0 24 24"
+          {isStreaming ? (
+            <button
+              onClick={onStop}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/90 text-white transition-all hover:bg-red-500 active:scale-95"
+              title="Stop generating"
             >
-              <rect x="6" y="6" width="12" height="12" rx="1" />
-            </svg>
-          </button>
-        ) : (
-          <button
-            onClick={handleSend}
-            disabled={!input.trim()}
-            className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition-colors hover:bg-indigo-700 disabled:bg-white/10 disabled:text-white/30"
-            title="Send message"
-          >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+              <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition-all hover:bg-indigo-500 active:scale-95 disabled:bg-transparent disabled:text-white/20"
+              title="Send message"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 12h14M12 5l7 7-7 7"
-              />
-            </svg>
-          </button>
-        )}
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between px-1">
+          <p className="text-[11px] text-white/20">
+            {activeModel} &middot; Enter to send, Shift+Enter for new line
+          </p>
+          {input.length > 0 && (
+            <p className="text-[11px] text-white/20">{input.length}</p>
+          )}
+        </div>
       </div>
     </div>
   );

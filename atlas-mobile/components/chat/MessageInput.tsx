@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { View, TextInput, Pressable, Text } from 'react-native';
+import { View, TextInput, Pressable, Text, Platform, StyleSheet } from 'react-native';
+import { BlurView } from 'expo-blur';
 
 interface Props {
   onSend: (content: string) => void;
@@ -18,38 +19,34 @@ export function MessageInput({ onSend, onStop, isStreaming }: Props) {
     setInput('');
   };
 
-  return (
-    <View className="border-t border-white/10 bg-[#0a0a0a] px-4 pb-6 pt-3">
-      <View className="flex-row items-end gap-3">
+  const hasText = input.trim().length > 0;
+
+  const InputContent = (
+    <View style={styles.contentWrap}>
+      <View style={styles.inputRow}>
         <TextInput
           ref={inputRef}
           value={input}
           onChangeText={setInput}
           placeholder="Message Atlas AI..."
-          placeholderTextColor="rgba(255,255,255,0.3)"
+          placeholderTextColor="rgba(255,255,255,0.2)"
           editable={!isStreaming}
           multiline
           maxLength={4000}
-          className="min-h-[44px] max-h-[120px] flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-          style={{ textAlignVertical: 'top' }}
+          style={styles.textInput}
         />
 
         {isStreaming ? (
-          <Pressable
-            onPress={onStop}
-            className="h-[44px] w-[44px] items-center justify-center rounded-xl bg-red-600 active:bg-red-700"
-          >
-            <View className="h-4 w-4 rounded-sm bg-white" />
+          <Pressable onPress={onStop} style={styles.stopBtn}>
+            <View style={styles.stopIcon} />
           </Pressable>
         ) : (
           <Pressable
             onPress={handleSend}
-            disabled={!input.trim()}
-            className={`h-[44px] w-[44px] items-center justify-center rounded-xl ${
-              input.trim() ? 'bg-indigo-600 active:bg-indigo-700' : 'bg-white/10'
-            }`}
+            disabled={!hasText}
+            style={[styles.sendBtn, hasText ? styles.sendActive : styles.sendInactive]}
           >
-            <Text className={`text-lg ${input.trim() ? 'text-white' : 'text-white/30'}`}>
+            <Text style={[styles.sendText, hasText ? styles.sendTextActive : styles.sendTextInactive]}>
               ↑
             </Text>
           </Pressable>
@@ -57,4 +54,95 @@ export function MessageInput({ onSend, onStop, isStreaming }: Props) {
       </View>
     </View>
   );
+
+  if (Platform.OS === 'ios') {
+    return (
+      <View style={styles.container}>
+        <BlurView intensity={80} tint="dark" style={styles.glass}>
+          <View style={styles.glassOverlay}>{InputContent}</View>
+        </BlurView>
+      </View>
+    );
+  }
+
+  return <View style={[styles.container, styles.fallback]}>{InputContent}</View>;
 }
+
+const styles = StyleSheet.create({
+  container: {
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  glass: {
+    overflow: 'hidden',
+  },
+  glassOverlay: {
+    backgroundColor: 'rgba(10,10,10,0.4)',
+  },
+  fallback: {
+    backgroundColor: '#0a0a0a',
+  },
+  contentWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 32,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    borderRadius: 20,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  textInput: {
+    flex: 1,
+    minHeight: 36,
+    maxHeight: 120,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    fontSize: 15,
+    color: '#ffffff',
+    textAlignVertical: 'center',
+  },
+  stopBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239,68,68,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stopIcon: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: '#fff',
+  },
+  sendBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendActive: {
+    backgroundColor: 'rgba(99,102,241,1)',
+  },
+  sendInactive: {
+    backgroundColor: 'transparent',
+  },
+  sendText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  sendTextActive: {
+    color: '#fff',
+  },
+  sendTextInactive: {
+    color: 'rgba(255,255,255,0.12)',
+  },
+});
