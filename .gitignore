@@ -1,0 +1,74 @@
+
+# atlas-mobile
+/atlas-mobile/node_modules/
+/atlas-mobile/.expo/
+/atlas-mobile/dist/
+/atlas-mobile/npm-debug.*
+/atlas-mobile/*.jks
+/atlas-mobile/*.p8
+/atlas-mobile/*.p12
+/atlas-mobile/*.key
+/atlas-mobile/*.mobileprovision
+/atlas-mobile/*.orig.*
+/atlas-mobile/web-build/
+# expo router
+/atlas-mobile/expo-env.d.ts
+
+
+
+/atlas-mobile/ios
+/atlas-mobile/android
+
+# macOS
+/atlas-mobile/.DS_Store
+
+# Temporary files created by Metro to check the health of the file watcher
+/atlas-mobile/.metro-health-check*
+
+# ------------------------------------------------------------
+
+# atlas-web
+
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/atlas-desktop/atlas-web/node_modules
+/atlas-desktop/atlas-web/.pnp
+/atlas-desktop/atlas-web/.pnp.*
+/atlas-desktop/atlas-web/.yarn/*
+/atlas-desktop/atlas-web/!.yarn/patches
+/atlas-desktop/atlas-web/!.yarn/plugins
+/atlas-desktop/atlas-web/!.yarn/releases
+/atlas-desktop/atlas-web/!.yarn/versions
+
+# testing
+/atlas-desktop/atlas-web/coverage
+
+# next.js
+/atlas-desktop/atlas-web/.next/
+/atlas-desktop/atlas-web/out/
+
+# production
+/atlas-desktop/atlas-web/build
+
+# misc
+/atlas-desktop/atlas-web/.DS_Store
+/atlas-desktop/atlas-web/*.pem
+
+# debug
+/atlas-desktop/atlas-web/npm-debug.log*
+/atlas-desktop/atlas-web/yarn-debug.log*
+/atlas-desktop/atlas-web/yarn-error.log*
+/atlas-desktop/atlas-web/.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+/atlas-desktop/atlas-web/.env*
+
+# vercel
+/atlas-desktop/atlas-web/.vercel
+
+# typescript
+/atlas-desktop/atlas-web/*.tsbuildinfo
+/atlas-desktop/atlas-web/next-env.d.ts
+
+# -----------------------------------------------------------
