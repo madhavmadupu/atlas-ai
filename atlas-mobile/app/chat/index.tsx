@@ -1,5 +1,5 @@
-import { useEffect, useCallback } from 'react';
-import { View, Text, FlatList, Pressable, Alert } from 'react-native';
+import { useState, useCallback } from 'react';
+import { View, Text, FlatList, Pressable, Alert, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useChatStore } from '@/store/chat.store';
 import { useConnectionStore } from '@/store/connection.store';
@@ -22,12 +22,19 @@ export default function ChatListScreen() {
   const { conversations, loadConversations, createConversation, deleteConversation } =
     useChatStore();
   const defaultModel = useConnectionStore((s) => s.defaultModel);
+  const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       loadConversations();
     }, [loadConversations]),
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadConversations();
+    setRefreshing(false);
+  }, [loadConversations]);
 
   const handleNewChat = async () => {
     const model = defaultModel ?? 'llama3.2:3b';
@@ -60,37 +67,48 @@ export default function ChatListScreen() {
       </View>
 
       {/* Conversation List */}
-      {conversations.length === 0 ? (
-        <View className="flex-1 items-center justify-center px-8">
-          <Text className="mb-2 text-lg font-semibold text-white/60">No conversations yet</Text>
-          <Text className="text-center text-sm text-white/30">
-            Tap "New Chat" to start a conversation with Atlas AI.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={conversations}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingHorizontal: 16 }}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } })}
-              onLongPress={() => handleDelete(item.id, item.title)}
-              className="mb-1.5 rounded-xl border border-white/5 bg-white/5 px-4 py-3 active:bg-white/10"
-            >
-              <Text className="text-sm font-medium text-white" numberOfLines={1}>
-                {item.title}
+      <FlatList
+        data={conversations}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={
+          conversations.length === 0
+            ? { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32 }
+            : { paddingHorizontal: 16 }
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#6366f1"
+            colors={['#6366f1']}
+          />
+        }
+        ListEmptyComponent={
+          <View className="items-center">
+            <Text className="mb-2 text-lg font-semibold text-white/60">No conversations yet</Text>
+            <Text className="text-center text-sm text-white/30">
+              Pull down to refresh, or tap "New Chat" above.
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <Pressable
+            onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } })}
+            onLongPress={() => handleDelete(item.id, item.title)}
+            className="mb-1.5 rounded-xl border border-white/5 bg-white/5 px-4 py-3 active:bg-white/10"
+          >
+            <Text className="text-sm font-medium text-white" numberOfLines={1}>
+              {item.title}
+            </Text>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="text-xs text-white/30">{item.model}</Text>
+              <Text className="text-xs text-white/30">
+                {formatRelativeTime(item.updated_at)}
               </Text>
-              <View className="mt-1 flex-row items-center justify-between">
-                <Text className="text-xs text-white/30">{item.model}</Text>
-                <Text className="text-xs text-white/30">
-                  {formatRelativeTime(item.updated_at)}
-                </Text>
-              </View>
-            </Pressable>
-          )}
-        />
-      )}
+            </View>
+          </Pressable>
+        )}
+      />
 
       {/* Bottom nav */}
       <View className="flex-row border-t border-white/10 bg-[#111111] px-4 py-3">

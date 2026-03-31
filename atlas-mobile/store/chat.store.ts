@@ -43,9 +43,7 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
 
   loadConversations: async () => {
     try {
-      const res = await fetch(routes.conversations(), {
-        signal: AbortSignal.timeout(5000),
-      });
+      const res = await fetch(routes.conversations());
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
       set({ conversations: data });
@@ -56,9 +54,7 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
 
   loadMessages: async (conversationId: string) => {
     try {
-      const res = await fetch(routes.conversation(conversationId), {
-        signal: AbortSignal.timeout(5000),
-      });
+      const res = await fetch(routes.conversation(conversationId));
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
       set({ messages: data.messages ?? [] });
