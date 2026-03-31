@@ -14,7 +14,8 @@
       "Bash(npx electron-rebuild:*)",
       "Bash(curl -s http://localhost:3001/api/models)",
       "Bash(node -e \"const p = require\\(''./node_modules/@fastify/static/package.json''\\); console.log\\(''static:'', p.version\\); const c = require\\(''./node_modules/@fastify/cors/package.json''\\); console.log\\(''cors:'', c.version\\); const f = require\\(''./node_modules/fastify/package.json''\\); console.log\\(''fastify:'', f.version\\)\")",
-      "Bash(node -e \"const c = require\\(''./node_modules/@fastify/cors/package.json''\\); console.log\\(''cors:'', c.version\\)\")"
+      "Bash(node -e \"const c = require\\(''./node_modules/@fastify/cors/package.json''\\); console.log\\(''cors:'', c.version\\)\")",
+      "Bash(powershell -Command \"New-NetFirewallRule -DisplayName 'Atlas AI Server' -Direction Inbound -Protocol TCP -LocalPort 3001 -Action Allow -Profile Private\" 2>&1)"
     ]
   }
 }

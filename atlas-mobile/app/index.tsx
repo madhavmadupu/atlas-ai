@@ -1,25 +1,28 @@
-import { Stack, Link } from 'expo-router';
+import { useEffect } from 'react';
+import { useRouter } from 'expo-router';
+import { View, ActivityIndicator, Text } from 'react-native';
+import { useConnectionStore } from '@/store/connection.store';
 
-import { View } from 'react-native';
+export default function Index() {
+  const router = useRouter();
+  const { desktopIP, checkConnection } = useConnectionStore();
 
-import { Button } from '@/components/Button';
-import { Container } from '@/components/Container';
-import { ScreenContent } from '@/components/ScreenContent';
+  useEffect(() => {
+    const init = async () => {
+      if (!desktopIP) {
+        router.replace('/connect');
+        return;
+      }
+      const ok = await checkConnection();
+      router.replace(ok ? '/chat' : '/connect');
+    };
+    init();
+  }, []);
 
-export default function Home() {
   return (
-    <View className={styles.container}>
-      <Stack.Screen options={{ title: 'Home' }} />
-      <Container>
-        <ScreenContent path="app/index.tsx" title="Home"></ScreenContent>
-        <Link href={{ pathname: '/details', params: { name: 'Dan' } }} asChild>
-          <Button title="Show Details" />
-        </Link>
-      </Container>
+    <View className="flex-1 items-center justify-center bg-[#0a0a0a]">
+      <ActivityIndicator size="large" color="#6366f1" />
+      <Text className="mt-4 text-sm text-white/40">Connecting...</Text>
     </View>
   );
 }
-
-const styles = {
-  container: 'flex flex-1 bg-white',
-};
