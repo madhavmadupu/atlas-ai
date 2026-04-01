@@ -3,6 +3,7 @@ import { useChatStore } from "@/store/chat.store";
 import { useModelsStore } from "@/store/models.store";
 import { useSettingsStore } from "@/store/settings.store";
 import { API_ROUTES, STREAM_TIMEOUT_MS } from "@/lib/constants";
+import { getPersona } from "@/lib/personas";
 
 export function useStreamingResponse() {
   const abortRef = useRef<AbortController | null>(null);
@@ -34,6 +35,13 @@ export function useStreamingResponse() {
       addUserMessage(content);
       startStreaming();
 
+      // Resolve persona system prompt (overrides default if persona has one)
+      const conversation = useChatStore
+        .getState()
+        .conversations.find((c) => c.id === conversationId);
+      const persona = getPersona(conversation?.personaId);
+      const resolvedSystemPrompt = persona.systemPrompt || systemPrompt;
+
       const allMessages = [
         ...messages.map((m) => ({ role: m.role, content: m.content })),
         { role: "user" as const, content },
@@ -49,7 +57,7 @@ export function useStreamingResponse() {
             conversationId,
             model: activeModel,
             messages: allMessages,
-            systemPrompt,
+            systemPrompt: resolvedSystemPrompt,
           }),
           signal: abortRef.current.signal,
         });

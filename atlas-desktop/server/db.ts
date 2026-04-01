@@ -60,6 +60,16 @@ function runMigrations(database: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at);
   `);
+
+  // Migration: add persona_id column if it doesn't exist
+  const cols = database
+    .prepare("PRAGMA table_info(conversations)")
+    .all() as { name: string }[];
+  if (!cols.some((c) => c.name === "persona_id")) {
+    database.exec(
+      "ALTER TABLE conversations ADD COLUMN persona_id TEXT DEFAULT NULL",
+    );
+  }
 }
 
 export function initDb(): Database.Database {
@@ -109,18 +119,20 @@ export const conversations = {
     title: string;
     model: string;
     systemPrompt?: string;
+    personaId?: string;
     createdAt: string;
     updatedAt: string;
   }) => {
     getDb()
       .prepare(
-        "INSERT INTO conversations (id, title, model, system_prompt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO conversations (id, title, model, system_prompt, persona_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         conv.id,
         conv.title,
         conv.model,
         conv.systemPrompt ?? null,
+        conv.personaId ?? null,
         conv.createdAt,
         conv.updatedAt,
       );

@@ -6,6 +6,7 @@ interface CreateConversationBody {
   title: string;
   model: string;
   systemPrompt?: string;
+  personaId?: string;
   createdAt: string;
   updatedAt: string;
 }
