@@ -23,7 +23,7 @@ interface ChatActions {
   loadConversations: () => Promise<void>;
   loadMessages: (conversationId: string) => Promise<void>;
   setActiveConversation: (id: string | null) => void;
-  createConversation: (model: string) => Promise<string>;
+  createConversation: (model: string, personaId?: string) => Promise<string>;
   deleteConversation: (id: string) => Promise<void>;
   addUserMessage: (content: string) => void;
   startStreaming: () => void;
@@ -68,13 +68,14 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
     if (id) get().loadMessages(id);
   },
 
-  createConversation: async (model: string) => {
+  createConversation: async (model: string, personaId?: string) => {
     const id = generateId();
     const now = new Date().toISOString();
     const conversation: Conversation = {
       id,
       title: 'New Conversation',
       model,
+      persona_id: personaId,
       created_at: now,
       updated_at: now,
     };
@@ -87,6 +88,7 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
           id,
           title: conversation.title,
           model,
+          personaId,
           createdAt: now,
           updatedAt: now,
         }),

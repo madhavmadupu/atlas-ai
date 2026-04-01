@@ -2,6 +2,7 @@ import { useRef, useCallback } from 'react';
 import { useChatStore } from '@/store/chat.store';
 import { useConnectionStore } from '@/store/connection.store';
 import { routes } from '@/lib/api';
+import { getPersona } from '@/lib/personas';
 
 export function useStreamingResponse(conversationId: string | null) {
   const abortRef = useRef<AbortController | null>(null);
@@ -30,7 +31,15 @@ export function useStreamingResponse(conversationId: string | null) {
       addUserMessage(content);
       startStreaming();
 
+      // Inject persona system prompt if applicable
+      const conversation = useChatStore.getState().conversations.find((c) => c.id === convId);
+      const persona = getPersona(conversation?.persona_id);
+      const systemMessages = persona.systemPrompt
+        ? [{ role: 'system' as const, content: persona.systemPrompt }]
+        : [];
+
       const allMessages = [
+        ...systemMessages,
         ...messages.map((m) => ({ role: m.role, content: m.content })),
         { role: 'user' as const, content },
       ];

@@ -22,16 +22,8 @@ import { useStreamingResponse } from '@/hooks/useStreamingResponse';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { MessageInput } from '@/components/chat/MessageInput';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
+import { getPersona } from '@/lib/personas';
 import type { Message } from '@/lib/types';
-
-// ─── Suggested Prompts ──────────────────────────────────────────────────────
-
-const SUGGESTED_PROMPTS = [
-  { label: 'Explain a concept', text: 'Explain how neural networks work in simple terms' },
-  { label: 'Write code', text: 'Write a Python function to sort a list of dictionaries by key' },
-  { label: 'Brainstorm ideas', text: 'Give me 5 creative project ideas for learning React Native' },
-  { label: 'Debug help', text: 'Help me debug this error: ' },
-];
 
 // ─── Date Separator ─────────────────────────────────────────────────────────
 
@@ -205,20 +197,23 @@ export default function ChatScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
 
-  // Get conversation model name
+  // Get conversation details and persona
   const conversation = conversations.find((c) => c.id === id);
   const modelName = conversation?.model ?? defaultModel ?? undefined;
+  const persona = getPersona(conversation?.persona_id);
 
   useEffect(() => {
     if (id) setActiveConversation(id);
   }, [id, setActiveConversation]);
 
-  // Set header with model subtitle
+  // Set header with persona name + model subtitle
   useEffect(() => {
     navigation.setOptions({
       headerTitle: () => (
         <View style={{ alignItems: 'center' }}>
-          <Text style={{ fontSize: 17, fontWeight: '600', color: '#ffffff' }}>Chat</Text>
+          <Text style={{ fontSize: 17, fontWeight: '600', color: '#ffffff' }}>
+            {persona.icon} {persona.name}
+          </Text>
           {modelName && (
             <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>
               {modelName}
@@ -238,7 +233,7 @@ export default function ChatScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, modelName]);
+  }, [navigation, modelName, persona]);
 
   const handleRefresh = useCallback(() => {
     if (id) loadMessages(id);
@@ -354,24 +349,27 @@ export default function ChatScreen() {
         )}
         ListEmptyComponent={
           <View style={s.emptyContainer}>
-            {/* Logo */}
-            <View style={s.emptyLogo}>
-              <Text style={s.emptyLogoText}>Atlas</Text>
+            {/* Persona icon */}
+            <View style={[s.emptyLogo, { backgroundColor: persona.accentBg, borderColor: persona.accentColor + '33' }]}>
+              <Text style={{ fontSize: 28 }}>{persona.icon}</Text>
             </View>
-            <Text style={s.emptyTitle}>How can I help you?</Text>
-            <Text style={s.emptySubtitle}>
-              Ask me anything. I run entirely on your local network.
+            <Text style={s.emptyTitle}>
+              {persona.id === 'general' ? 'How can I help you?' : persona.name}
             </Text>
+            <Text style={s.emptySubtitle}>{persona.description}</Text>
 
-            {/* Suggested prompts */}
+            {/* Persona-specific suggested prompts */}
             <View style={s.promptsGrid}>
-              {SUGGESTED_PROMPTS.map((p) => (
+              {persona.suggestedPrompts.map((p) => (
                 <Pressable
                   key={p.label}
-                  style={({ pressed }) => [s.promptChip, pressed && s.promptChipPressed]}
+                  style={({ pressed }) => [
+                    s.promptChip,
+                    pressed && { backgroundColor: persona.accentColor + '1A', borderColor: persona.accentColor + '33' },
+                  ]}
                   onPress={() => handleSuggestedPrompt(p.text)}
                 >
-                  <Text style={s.promptLabel}>{p.label}</Text>
+                  <Text style={[s.promptLabel, { color: persona.accentColor }]}>{p.label}</Text>
                   <Text style={s.promptText} numberOfLines={1}>{p.text}</Text>
                 </Pressable>
               ))}

@@ -4,6 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useChatStore } from '@/store/chat.store';
 import { useConnectionStore } from '@/store/connection.store';
+import { getPersona } from '@/lib/personas';
+import { PersonaPicker } from '@/components/chat/PersonaPicker';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 
 function formatRelativeTime(iso: string): string {
@@ -19,33 +21,6 @@ function formatRelativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-const ACCENT_COLORS = [
-  'bg-indigo-500/20',
-  'bg-emerald-500/20',
-  'bg-amber-500/20',
-  'bg-rose-500/20',
-  'bg-cyan-500/20',
-  'bg-violet-500/20',
-  'bg-pink-500/20',
-  'bg-teal-500/20',
-];
-const ACCENT_TEXT = [
-  'text-indigo-400',
-  'text-emerald-400',
-  'text-amber-400',
-  'text-rose-400',
-  'text-cyan-400',
-  'text-violet-400',
-  'text-pink-400',
-  'text-teal-400',
-];
-
-function hashIndex(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return Math.abs(h) % ACCENT_COLORS.length;
-}
-
 export default function ChatListScreen() {
   const router = useRouter();
   const { conversations, loadConversations, createConversation, deleteConversation } =
@@ -53,6 +28,7 @@ export default function ChatListScreen() {
   const { defaultModel, isConnected } = useConnectionStore();
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [pickerVisible, setPickerVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -63,7 +39,10 @@ export default function ChatListScreen() {
   const filtered = useMemo(() => {
     if (!search.trim()) return conversations;
     const q = search.toLowerCase();
-    return conversations.filter((c) => c.title.toLowerCase().includes(q));
+    return conversations.filter((c) => {
+      const persona = getPersona(c.persona_id);
+      return c.title.toLowerCase().includes(q) || persona.name.toLowerCase().includes(q);
+    });
   }, [conversations, search]);
 
   const onRefresh = useCallback(async () => {
@@ -72,9 +51,12 @@ export default function ChatListScreen() {
     setRefreshing(false);
   }, [loadConversations]);
 
-  const handleNewChat = async () => {
+  const handleNewChat = () => setPickerVisible(true);
+
+  const handlePersonaSelected = async (personaId: string) => {
+    setPickerVisible(false);
     const model = defaultModel ?? 'llama3.2:3b';
-    const id = await createConversation(model);
+    const id = await createConversation(model, personaId);
     router.push({ pathname: '/chat/[id]', params: { id } });
   };
 
@@ -203,7 +185,7 @@ export default function ChatListScreen() {
           </View>
         }
         renderItem={({ item }) => {
-          const idx = hashIndex(item.id);
+          const persona = getPersona(item.persona_id);
           const useGlass = isLiquidGlassAvailable();
           const CardWrapper = useGlass ? GlassView : View;
           const cardProps = useGlass
@@ -217,18 +199,25 @@ export default function ChatListScreen() {
             >
               <CardWrapper {...(cardProps as any)}>
                 <View className="flex-row items-center px-4 py-3.5">
+                  {/* Persona avatar */}
                   <View
-                    className={`mr-3 h-10 w-10 items-center justify-center rounded-xl ${ACCENT_COLORS[idx]}`}
+                    className="mr-3 h-10 w-10 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: persona.accentBg }}
                   >
-                    <Text className={`text-[14px] font-bold ${ACCENT_TEXT[idx]}`}>
-                      {(item.title[0] || 'N').toUpperCase()}
-                    </Text>
+                    <Text style={{ fontSize: 18 }}>{persona.icon}</Text>
                   </View>
                   <View className="flex-1">
                     <Text className="text-[14px] font-medium text-white" numberOfLines={1}>
                       {item.title}
                     </Text>
                     <View className="mt-1 flex-row items-center gap-1.5">
+                      <Text
+                        className="text-[11px] font-medium"
+                        style={{ color: persona.accentColor }}
+                      >
+                        {persona.name}
+                      </Text>
+                      <View className="h-0.5 w-0.5 rounded-full bg-white/15" />
                       <Text className="text-[11px] text-white/25">{item.model}</Text>
                       <View className="h-0.5 w-0.5 rounded-full bg-white/15" />
                       <Text className="text-[11px] text-white/25">
@@ -244,6 +233,12 @@ export default function ChatListScreen() {
         }}
       />
 
+      {/* Persona Picker Modal */}
+      <PersonaPicker
+        visible={pickerVisible}
+        onSelect={handlePersonaSelected}
+        onClose={() => setPickerVisible(false)}
+      />
     </View>
   );
 }
