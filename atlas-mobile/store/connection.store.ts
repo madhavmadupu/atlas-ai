@@ -1,16 +1,19 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { buildSettingsForTier, LOCAL_INFERENCE_PRESETS } from '@/lib/local-inference';
+import type { InferenceProvider, LocalInferenceSettings } from '@/lib/types';
 
 interface ConnectionState {
   desktopIP: string | null;
   desktopPort: number;
   isConnected: boolean;
   defaultModel: string | null;
-  inferenceProvider: 'desktop' | 'local';
+  inferenceProvider: InferenceProvider;
   localModelPath: string | null;
   localModelName: string | null;
   huggingFaceToken: string | null;
+  localSettings: LocalInferenceSettings;
 }
 
 interface ConnectionActions {
@@ -18,9 +21,11 @@ interface ConnectionActions {
   checkConnection: () => Promise<boolean>;
   disconnect: () => void;
   setEndpoint: (ip: string, port: number) => void;
-  setInferenceProvider: (provider: 'desktop' | 'local') => void;
+  setInferenceProvider: (provider: InferenceProvider) => void;
   setLocalModel: (model: { path: string; name?: string | null } | null) => void;
   setHuggingFaceToken: (token: string | null) => void;
+  updateLocalSettings: (settings: Partial<LocalInferenceSettings>) => void;
+  applyLocalTier: (tier: LocalInferenceSettings['performanceTier']) => void;
 }
 
 export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
@@ -34,6 +39,7 @@ export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
       localModelPath: null,
       localModelName: null,
       huggingFaceToken: null,
+      localSettings: LOCAL_INFERENCE_PRESETS.medium,
 
       connectToDesktop: async (ip, port) => {
         const baseUrl = `http://${ip}:${port}`;
@@ -101,6 +107,19 @@ export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
       setHuggingFaceToken: (token) => {
         set({ huggingFaceToken: token });
       },
+      updateLocalSettings: (settings) => {
+        set((state) => ({
+          localSettings: {
+            ...state.localSettings,
+            ...settings,
+          },
+        }));
+      },
+      applyLocalTier: (tier) => {
+        set((state) => ({
+          localSettings: buildSettingsForTier(tier, state.localSettings),
+        }));
+      },
     }),
     {
       name: '@atlas/connection',
@@ -112,8 +131,15 @@ export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
         localModelPath: state.localModelPath,
         localModelName: state.localModelName,
         huggingFaceToken: state.huggingFaceToken,
+        localSettings: state.localSettings,
       }),
       onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.localSettings = buildSettingsForTier(
+            state.localSettings?.performanceTier ?? 'medium',
+            state.localSettings
+          );
+        }
         state?.checkConnection?.();
       },
     }

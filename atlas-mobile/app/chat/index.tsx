@@ -23,6 +23,7 @@ export default function ChatListScreen() {
     useChatStore();
   const defaultModel = useConnectionStore((s) => s.defaultModel);
   const inferenceProvider = useConnectionStore((s) => s.inferenceProvider);
+  const localModelName = useConnectionStore((s) => s.localModelName);
   const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
@@ -38,7 +39,10 @@ export default function ChatListScreen() {
   }, [loadConversations]);
 
   const handleNewChat = async () => {
-    const model = inferenceProvider === 'local' ? 'local' : (defaultModel ?? 'llama3.2:3b');
+    const model =
+      inferenceProvider === 'local'
+        ? (localModelName ?? 'On-device GGUF')
+        : (defaultModel ?? 'llama3.2:3b');
     const id = await createConversation(model);
     router.push({ pathname: '/chat/[id]', params: { id } });
   };

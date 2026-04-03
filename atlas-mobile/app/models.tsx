@@ -1,46 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ScrollView,
-  View,
-  Text,
-  TextInput,
-  Pressable,
   ActivityIndicator,
   Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
+import { fetchModelFiles, pickBestGguf, searchHuggingFaceModels } from '@/lib/huggingface';
+import { getTierLabel, TIER_RECOMMENDATIONS } from '@/lib/local-inference';
+import { buildModelPath, ensureModelDirectory } from '@/lib/model-storage';
+import { validateLocalChatModel } from '@/lib/model-validation';
+import type { HuggingFaceModelSummary } from '@/lib/huggingface';
+import type { DevicePerformanceTier } from '@/lib/types';
 import { useConnectionStore } from '@/store/connection.store';
 import { useModelStore } from '@/store/model.store';
-import { fetchModelFiles, pickBestGguf, searchHuggingFaceModels } from '@/lib/huggingface';
-import { buildModelPath, ensureModelDirectory } from '@/lib/model-storage';
-import type { LocalModel } from '@/store/model.store';
-import type { HuggingFaceModelSummary } from '@/lib/huggingface';
-
-const CATALOG_MODELS = [
-  {
-    modelId: 'TheBloke/guanaco-7B-HF',
-    title: 'Guanaco 7B (HF)',
-    size: '2.7 GB',
-    params: '7B',
-    skills: 'Question answering, reasoning, summarization',
-  },
-  {
-    modelId: 'TheBloke/stable-vicuna-13b',
-    title: 'Stable Vicuna 13B',
-    size: '4.2 GB',
-    params: '13B',
-    skills: 'Dialogue, code generation',
-  },
-  {
-    modelId: 'TheBloke/llama3-7b',
-    title: 'Llama 3 7B',
-    size: '3.5 GB',
-    params: '7B',
-    skills: 'Math, reasoning, coding',
-  },
-];
 
 export default function ModelsScreen() {
   const router = useRouter();
@@ -54,78 +32,59 @@ export default function ModelsScreen() {
     setDownloadProgress,
   } = useModelStore();
   const {
-    localModelPath,
-    setLocalModel,
-    setInferenceProvider,
-    inferenceProvider,
     huggingFaceToken,
+    localModelPath,
+    localModelName,
+    localSettings,
+    applyLocalTier,
     setHuggingFaceToken,
+    setInferenceProvider,
+    setLocalModel,
   } = useConnectionStore();
 
+  const [hfTokenInput, setHfTokenInput] = useState(huggingFaceToken ?? '');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<HuggingFaceModelSummary[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [showAddMenu, setShowAddMenu] = useState(false);
-  const [showHfSearch, setShowHfSearch] = useState(false);
-  const [hfTokenInput, setHfTokenInput] = useState(huggingFaceToken ?? '');
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
-    loadModels();
+    void loadModels();
   }, [loadModels]);
 
-  const canUseLocal = useMemo(() => inferenceProvider === 'local', [inferenceProvider]);
+  const activeTier = localSettings.performanceTier;
+  const recommendations = useMemo(() => TIER_RECOMMENDATIONS, []);
 
   const handleSaveToken = () => {
     setHuggingFaceToken(hfTokenInput.trim() || null);
-    Alert.alert('Saved', 'Hugging Face token stored for gated downloads.');
+    Alert.alert('Saved', 'Hugging Face token stored for model downloads.');
   };
 
-  const handleSearch = async () => {
-    if (!searchTerm.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    setIsSearching(true);
-    setSearchError(null);
+  const downloadModel = async (
+    modelId: string,
+    progressId: string,
+    preferredQuantization?: string
+  ) => {
     try {
-      const results = await searchHuggingFaceModels(
-        searchTerm.trim(),
-        huggingFaceToken?.trim() || undefined
-      );
-      setSearchResults(results);
-    } catch (e) {
-      setSearchError(e instanceof Error ? e.message : 'Search failed');
-    } finally {
-      setIsSearching(false);
-    }
-  };
+      setDownloadProgress(progressId, 0);
+      const files = await fetchModelFiles(modelId, huggingFaceToken?.trim() || undefined);
+      const candidate = pickBestGguf(files, activeTier, preferredQuantization);
 
-  const handleCatalogDownload = (model: (typeof CATALOG_MODELS)[number]) => {
-    handleDownload({
-      id: model.modelId,
-      modelId: model.modelId,
-      downloads: 0,
-      tags: [],
-      lastModified: new Date().toISOString(),
-    });
-  };
-
-  const handleDownload = async (model: HuggingFaceModelSummary) => {
-    try {
-      setShowAddMenu(false);
-      setShowHfSearch(false);
-      setDownloadProgress(model.id, 0);
-      const files = await fetchModelFiles(model.modelId, huggingFaceToken?.trim() || undefined);
-      const candidate = pickBestGguf(files);
       if (!candidate) {
-        Alert.alert('No GGUF', 'This model does not expose a .gguf file that we can download.');
+        Alert.alert('No GGUF found', 'That repository does not expose a GGUF file we can use.');
+        return;
+      }
+
+      const validation = validateLocalChatModel([candidate.rfilename, modelId]);
+      if (!validation.isChatCapable) {
+        Alert.alert('Unsupported model', validation.reason);
         return;
       }
 
       await ensureModelDirectory();
-      const destination = buildModelPath(model.modelId, candidate.rfilename);
-      const downloadUrl = `https://huggingface.co/${model.modelId}/resolve/main/${candidate.rfilename}`;
+      const destination = buildModelPath(modelId, candidate.rfilename);
+      const downloadUrl = `https://huggingface.co/${modelId}/resolve/main/${candidate.rfilename}`;
       const token = huggingFaceToken?.trim();
 
       const download = FileSystem.createDownloadResumable(
@@ -143,277 +102,344 @@ export default function ModelsScreen() {
             progress.totalBytesExpectedToWrite > 0
               ? progress.totalBytesWritten / progress.totalBytesExpectedToWrite
               : null;
-          setDownloadProgress(model.id, ratio);
+          setDownloadProgress(progressId, ratio);
         }
       );
 
       const result = await download.downloadAsync();
+      if (!result?.uri) {
+        throw new Error('Download finished without a local file path.');
+      }
+
       await addModel({
-        id: `${model.modelId}-${Date.now()}`,
+        id: `${modelId}-${candidate.rfilename}`,
         name: candidate.rfilename,
         path: result.uri,
         size: candidate.size ?? 0,
         source: 'huggingface',
-        huggingFaceId: model.modelId,
+        huggingFaceId: modelId,
         createdAt: new Date().toISOString(),
       });
+
       setLocalModel({ path: result.uri, name: candidate.rfilename });
       setInferenceProvider('local');
-      Alert.alert('Model ready', 'The GGUF file was downloaded and selected for on-device chat.');
-    } catch (e) {
-      const message =
-        e instanceof Error
-          ? e.message
-          : 'Unable to download the model. Check your network or Hugging Face token.';
-      Alert.alert('Download failed', message);
+
+      Alert.alert(
+        'Model ready',
+        `${candidate.rfilename} is stored on-device and selected for offline chat.`
+      );
+    } catch (error) {
+      Alert.alert(
+        'Download failed',
+        error instanceof Error ? error.message : 'Unable to download this model.'
+      );
     } finally {
       setDownloadProgress(null, null);
     }
   };
 
+  const handleSearch = async () => {
+    if (!searchTerm.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError(null);
+
+    try {
+      const results = await searchHuggingFaceModels(
+        searchTerm.trim(),
+        huggingFaceToken?.trim() || undefined
+      );
+      setSearchResults(results);
+    } catch (error) {
+      setSearchError(error instanceof Error ? error.message : 'Search failed');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   const handleImport = async () => {
     try {
-      setShowAddMenu(false);
-      setShowHfSearch(false);
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*',
         copyToCacheDirectory: true,
       });
-      if (result.type !== 'success') {
-        Alert.alert('Import canceled', 'No file was selected.');
+
+      if (result.canceled || !result.assets?.[0]) {
         return;
       }
+
+      const asset = result.assets[0];
       const dir = await ensureModelDirectory();
-      const sourceUri = result.fileCopyUri ?? result.uri;
-      if (!sourceUri) {
-        throw new Error('Could not resolve the selected file.');
-      }
-      const fileName = result.name ?? sourceUri.split('/').pop() ?? `model-${Date.now()}.gguf`;
+      const fileName = asset.name || `model-${Date.now()}.gguf`;
       const destination = `${dir}${fileName}`;
-      await FileSystem.copyAsync({ from: sourceUri, to: destination });
+
+      await FileSystem.copyAsync({
+        from: asset.uri,
+        to: destination,
+      });
+
       const info = await FileSystem.getInfoAsync(destination);
       if (!info.exists) {
-        throw new Error('Failed to store the file locally.');
+        throw new Error('The selected file could not be copied into app storage.');
       }
-      const storedName = result.name ?? fileName;
+
+      const validation = validateLocalChatModel([fileName, destination]);
+      if (!validation.isChatCapable) {
+        await FileSystem.deleteAsync(destination, { idempotent: true });
+        Alert.alert('Unsupported model', validation.reason);
+        return;
+      }
+
       await addModel({
         id: `manual-${Date.now()}`,
-        name: storedName,
+        name: fileName,
         path: destination,
         size: info.size ?? 0,
         source: 'manual',
         createdAt: new Date().toISOString(),
       });
-      setLocalModel({ path: destination, name: storedName });
+
+      setLocalModel({ path: destination, name: fileName });
       setInferenceProvider('local');
-      Alert.alert('Imported', `GGUF stored at ${storedName} and ready for on-device chat.`);
-    } catch (e) {
-      Alert.alert('Import failed', e instanceof Error ? e.message : 'Unable to import the file.');
+      Alert.alert('Imported', `${fileName} is now available for offline chat.`);
+    } catch (error) {
+      Alert.alert(
+        'Import failed',
+        error instanceof Error ? error.message : 'Unable to import that GGUF file.'
+      );
     }
   };
 
-  const handleUseModel = (model: LocalModel) => {
-    setLocalModel({ path: model.path, name: model.name });
+  const handleUseModel = (path: string, name: string) => {
+    const validation = validateLocalChatModel([name, path]);
+    if (!validation.isChatCapable) {
+      Alert.alert('Unsupported model', validation.reason);
+      return;
+    }
+    setLocalModel({ path, name });
     setInferenceProvider('local');
-    if (model.path !== localModelPath) {
-      Alert.alert('Model selected', `${model.name} will be used next time you start a chat.`);
-    }
+    Alert.alert('Selected', `${name} will be used for on-device inference.`);
   };
 
-  const handleDelete = async (model: LocalModel) => {
-    const wasActive = model.path === localModelPath;
-    await removeModel(model.id);
-    if (wasActive) {
-      setLocalModel({ path: null, name: null });
+  const handleDelete = async (id: string, name: string) => {
+    await removeModel(id);
+    if (models.find((model) => model.id === id)?.path === localModelPath) {
+      setLocalModel(null);
     }
+    Alert.alert('Removed', `${name} was deleted from this device.`);
   };
 
-  const renderLocalModel = ({ item }: { item: LocalModel }) => {
-    const isActive = item.path === localModelPath;
+  const renderTierButton = (tier: DevicePerformanceTier) => {
+    const active = tier === activeTier;
     return (
-      <View key={item.id} className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-        <View className="mb-1 flex-row items-center justify-between">
-          <Text className="text-base font-semibold text-white">{item.name}</Text>
-          {isActive && (
-            <Text className="text-xs font-semibold uppercase text-emerald-400">Active</Text>
-          )}
-        </View>
-        <Text className="text-xs text-white/40">
-          Source: {item.source === 'huggingface' ? item.huggingFaceId : 'Manual import'}
+      <Pressable
+        key={tier}
+        onPress={() => applyLocalTier(tier)}
+        className={`flex-1 rounded-2xl border px-3 py-3 ${
+          active ? 'border-emerald-500/40 bg-emerald-500/15' : 'border-white/10 bg-white/5'
+        }`}>
+        <Text className="text-center text-sm font-semibold text-white">{getTierLabel(tier)}</Text>
+        <Text className="mt-1 text-center text-xs text-white/40">
+          {tier === 'low' ? '1B to 2B' : tier === 'medium' ? '3B class' : '7B class'}
         </Text>
-        <View className="mt-3 flex-row gap-2">
-          <Pressable
-            onPress={() => handleUseModel(item)}
-            className="flex-1 items-center rounded-xl border border-white/30 px-3 py-2">
-            <Text className="text-sm font-semibold text-white">Use on Device</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => handleDelete(item)}
-            className="flex-1 items-center rounded-xl border border-rose-400/30 px-3 py-2">
-            <Text className="text-sm font-semibold text-rose-300">Delete</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  };
-
-  const renderResult = ({ item }: { item: HuggingFaceModelSummary }) => {
-    const downloading = downloadingModelId === item.id;
-    return (
-      <View key={item.id} className="mb-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-        <Text className="text-base font-semibold text-white">{item.modelId}</Text>
-        <Text className="text-xs text-white/40">Downloads: {item.downloads.toLocaleString()}</Text>
-        <View className="mt-3 flex-row items-center justify-between">
-          <Pressable
-            disabled={downloading}
-            onPress={() => handleDownload(item)}
-            className={`flex-1 items-center rounded-xl px-3 py-2 ${
-              downloading
-                ? 'border border-white/30 bg-white/20'
-                : 'border border-emerald-400/50 bg-emerald-500/10'
-            }`}>
-            {downloading ? (
-              <View className="flex-row items-center gap-2">
-                <ActivityIndicator color="#ffffff" size="small" />
-                <Text className="text-sm font-semibold text-white">
-                  {downloadProgress ? `${Math.round(downloadProgress * 100)}%` : 'Preparing'}
-                </Text>
-              </View>
-            ) : (
-              <Text className="text-sm font-semibold text-white">Download GGUF</Text>
-            )}
-          </Pressable>
-        </View>
-      </View>
+      </Pressable>
     );
   };
 
   return (
-    <View className="relative flex-1 bg-[#0a0a0a] px-4 pt-6">
-      <View className="mb-4 flex-row items-center justify-between">
-        <Text className="text-lg font-semibold text-white">Models</Text>
-        <Pressable onPress={() => router.back()} className="px-2 py-1">
-          <Text className="text-sm text-white/60">Close</Text>
-        </Pressable>
-      </View>
+    <View className="flex-1 bg-[#0a0a0a]">
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 32 }}>
+        <View className="mb-5 flex-row items-center justify-between">
+          <View>
+            <Text className="text-2xl font-semibold text-white">On-device Models</Text>
+            <Text className="mt-1 text-sm text-white/40">
+              Offline chat runs through `llama.rn` and a local GGUF on the phone.
+            </Text>
+          </View>
+          <Pressable onPress={() => router.back()} className="rounded-xl bg-white/5 px-3 py-2">
+            <Text className="text-sm font-semibold text-white/80">Close</Text>
+          </Pressable>
+        </View>
 
-      <View className="mb-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-        <Text className="mb-2 text-sm font-medium text-white/60">
-          Hugging Face Token (optional)
-        </Text>
-        <TextInput
-          value={hfTokenInput}
-          onChangeText={setHfTokenInput}
-          placeholder="hf_xxx..."
-          placeholderTextColor="rgba(255,255,255,0.35)"
-          autoCapitalize="none"
-          autoCorrect={false}
-          className="mb-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
-        />
-        <Pressable
-          onPress={handleSaveToken}
-          className="items-center rounded-2xl border border-white/10 bg-emerald-500/20 px-4 py-3">
-          <Text className="text-sm font-semibold text-white">Save token</Text>
-        </Pressable>
-        {!!huggingFaceToken && (
-          <Text className="mt-2 text-xs text-white/40">Token configured for gated downloads.</Text>
-        )}
-      </View>
+        <View className="mb-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+          <Text className="text-sm font-medium text-white/60">Device profile</Text>
+          <Text className="mt-1 text-sm leading-5 text-white/40">
+            Pick the class of phone you want to target. Atlas uses this to choose saner default
+            quantizations and llama.cpp settings.
+          </Text>
+          <View className="mt-4 flex-row gap-3">
+            {(['low', 'medium', 'high'] as DevicePerformanceTier[]).map(renderTierButton)}
+          </View>
+        </View>
 
-      <View className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4">
-        <Text className="text-sm text-white/60">
-          Choose a listing and tap **Download GGUF** to grab the weights. Use the buttons below to
-          pull a model from Hugging Face or import any GGUF stored on the device.
-        </Text>
-        <View className="mt-4 flex-row gap-3">
+        <View className="mb-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+          <Text className="text-sm font-medium text-white/60">Active offline model</Text>
+          <Text className="mt-2 text-base font-semibold text-white">
+            {localModelName ?? 'No model selected'}
+          </Text>
+          <Text className="mt-1 text-xs text-white/40">
+            Tier: {getTierLabel(activeTier)}. Context {localSettings.contextSize}. Max response{' '}
+            {localSettings.maxTokens} tokens.
+          </Text>
+        </View>
+
+        <View className="mb-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+          <Text className="text-sm font-medium text-white/60">Hugging Face token</Text>
+          <TextInput
+            value={hfTokenInput}
+            onChangeText={setHfTokenInput}
+            placeholder="hf_xxx..."
+            placeholderTextColor="rgba(255,255,255,0.3)"
+            autoCapitalize="none"
+            autoCorrect={false}
+            className="mt-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
+          />
+          <View className="mt-3 flex-row gap-3">
+            <Pressable
+              onPress={handleSaveToken}
+              className="flex-1 items-center rounded-2xl border border-white/10 bg-white/10 py-3">
+              <Text className="text-sm font-semibold text-white">Save token</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowSearch(true)}
+              className="flex-1 items-center rounded-2xl border border-emerald-500/40 bg-emerald-500/10 py-3">
+              <Text className="text-sm font-semibold text-white">Search Hugging Face</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View className="mb-6 flex-row gap-3">
           <Pressable
             onPress={handleImport}
-            className="flex-1 items-center rounded-xl border border-white/20 bg-white/10 px-3 py-2">
-            <Text className="text-sm font-semibold text-white">Import from Files</Text>
+            className="flex-1 items-center rounded-2xl border border-white/10 bg-white/10 py-3">
+            <Text className="text-sm font-semibold text-white">Import GGUF</Text>
           </Pressable>
           <Pressable
-            onPress={handleSearch}
-            className="flex-1 items-center rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
-            {isSearching ? (
-              <ActivityIndicator color="#ffffff" size="small" />
-            ) : (
-              <Text className="text-sm font-semibold text-white">Search Hugging Face</Text>
-            )}
+            onPress={() => router.push('/settings')}
+            className="flex-1 items-center rounded-2xl border border-white/10 bg-white/10 py-3">
+            <Text className="text-sm font-semibold text-white">Tune settings</Text>
           </Pressable>
         </View>
-      </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <View className="flex-1">
-          <Text className="mb-3 text-sm font-semibold text-white">Available to Download</Text>
-          {CATALOG_MODELS.map((catalog) => (
-            <View
-              key={catalog.modelId}
-              className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-              <View className="mb-1 flex-row items-center justify-between">
-                <Text className="text-base font-semibold text-white">{catalog.title}</Text>
-                <Text className="text-xs text-white/40">{catalog.params}</Text>
+        <View className="mb-6">
+          <Text className="mb-3 text-sm font-semibold text-white">Recommended downloads</Text>
+          {recommendations.map((item) => {
+            const downloading = downloadingModelId === item.id;
+            const highlighted = item.tier === activeTier;
+
+            return (
+              <View
+                key={item.id}
+                className={`mb-3 rounded-3xl border p-4 ${
+                  highlighted
+                    ? 'border-emerald-500/40 bg-emerald-500/10'
+                    : 'border-white/10 bg-white/5'
+                }`}>
+                <View className="flex-row items-start justify-between">
+                  <View className="flex-1 pr-3">
+                    <Text className="text-base font-semibold text-white">{item.title}</Text>
+                    <Text className="mt-1 text-xs text-white/50">{item.repoId}</Text>
+                  </View>
+                  <Text className="rounded-full bg-black/20 px-3 py-1 text-xs text-white/70">
+                    {item.target}
+                  </Text>
+                </View>
+                <Text className="mt-3 text-sm leading-5 text-white/40">{item.description}</Text>
+                <Text className="mt-2 text-xs text-white/50">
+                  Suggested quantization: {item.suggestedQuantization}. Storage:{' '}
+                  {item.estimatedSize}
+                </Text>
+                <Pressable
+                  disabled={downloading}
+                  onPress={() =>
+                    void downloadModel(item.repoId, item.id, item.suggestedQuantization)
+                  }
+                  className={`mt-4 items-center rounded-2xl py-3 ${
+                    downloading ? 'bg-white/20' : 'bg-emerald-600'
+                  }`}>
+                  {downloading ? (
+                    <View className="flex-row items-center gap-2">
+                      <ActivityIndicator color="#ffffff" size="small" />
+                      <Text className="text-sm font-semibold text-white">
+                        {downloadProgress ? `${Math.round(downloadProgress * 100)}%` : 'Preparing'}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text className="text-sm font-semibold text-white">Download for this tier</Text>
+                  )}
+                </Pressable>
               </View>
-              <Text className="mb-1 text-xs text-white/40">Size: {catalog.size}</Text>
-              <Text className="mb-3 text-xs text-white/40">Skills: {catalog.skills}</Text>
-              <Pressable
-                onPress={() => handleCatalogDownload(catalog)}
-                className="items-center rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-3 py-2">
-                <Text className="text-sm font-semibold text-white">Download GGUF</Text>
-              </Pressable>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
-        <View className="mt-6">
-          <Text className="mb-3 text-sm font-semibold text-white">Local models</Text>
+        <View>
+          <Text className="mb-3 text-sm font-semibold text-white">Stored locally</Text>
           {models.length === 0 ? (
-            <Text className="text-xs text-white/40">No models downloaded yet.</Text>
+            <View className="rounded-3xl border border-dashed border-white/10 bg-white/5 p-4">
+              <Text className="text-sm text-white/40">
+                No GGUF files are stored on this device yet.
+              </Text>
+            </View>
           ) : (
-            models.map((item) => renderLocalModel({ item }))
+            models.map((model) => {
+              const active = model.path === localModelPath;
+
+              return (
+                <View
+                  key={model.id}
+                  className="mb-3 rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="flex-1 pr-3 text-base font-semibold text-white">
+                      {model.name}
+                    </Text>
+                    {active && (
+                      <Text className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-300">
+                        Active
+                      </Text>
+                    )}
+                  </View>
+                  <Text className="mt-1 text-xs text-white/40">
+                    {model.source === 'huggingface'
+                      ? model.huggingFaceId
+                      : 'Imported from local files'}
+                  </Text>
+                  <View className="mt-4 flex-row gap-3">
+                    <Pressable
+                      onPress={() => handleUseModel(model.path, model.name)}
+                      className="flex-1 items-center rounded-2xl border border-white/10 bg-white/10 py-3">
+                      <Text className="text-sm font-semibold text-white">Use model</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void handleDelete(model.id, model.name)}
+                      className="flex-1 items-center rounded-2xl border border-red-500/20 bg-red-500/10 py-3">
+                      <Text className="text-sm font-semibold text-red-200">Delete</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })
           )}
         </View>
-
-        {!canUseLocal && (
-          <Text className="mt-4 text-center text-xs text-white/50">
-            Select or download a GGUF model to switch on-device inference.
-          </Text>
-        )}
       </ScrollView>
 
-      {showAddMenu && (
-        <View className="absolute bottom-24 right-6 z-40 rounded-3xl border border-white/10 bg-white/10 p-4 shadow-lg">
-          <Pressable
-            onPress={() => {
-              setShowAddMenu(false);
-              setShowHfSearch(true);
-            }}
-            className="mb-2 rounded-2xl border border-white/30 bg-white/5 px-4 py-3">
-            <Text className="text-sm font-semibold text-white">Add from Hugging Face</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              setShowAddMenu(false);
-              handleImport();
-            }}
-            className="rounded-2xl border border-white/30 bg-white/5 px-4 py-3">
-            <Text className="text-sm font-semibold text-white">Add Local Model</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {showHfSearch && (
-        <View className="absolute inset-0 z-50 bg-black/70">
-          <View className="m-4 mt-16 flex-1 rounded-[32px] bg-[#111111] p-4">
-            <View className="mb-3 flex-row items-center gap-2">
+      {showSearch && (
+        <View className="absolute inset-0 bg-black/75">
+          <View className="mx-4 mt-16 flex-1 rounded-[28px] bg-[#111111] p-4">
+            <View className="mb-3 flex-row gap-2">
               <TextInput
                 value={searchTerm}
                 onChangeText={setSearchTerm}
-                placeholder="Search models (gemma, qwen...)"
-                placeholderTextColor="rgba(255,255,255,0.35)"
-                className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+                placeholder="Search GGUF models"
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                className="flex-1 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
               />
-              <Pressable onPress={handleSearch} className="rounded-2xl bg-emerald-500 px-4 py-3">
+              <Pressable
+                onPress={() => void handleSearch()}
+                className="rounded-2xl bg-emerald-600 px-4 py-3">
                 {isSearching ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
@@ -421,37 +447,62 @@ export default function ModelsScreen() {
                 )}
               </Pressable>
             </View>
-            {searchError && <Text className="mb-2 text-xs text-rose-300">{searchError}</Text>}
+
+            {searchError && <Text className="mb-2 text-sm text-red-300">{searchError}</Text>}
+
             <ScrollView className="flex-1">
-              {isSearching ? (
-                <View className="items-center">
-                  <ActivityIndicator size="small" color="#ffffff" />
-                </View>
-              ) : searchResults.length === 0 ? (
-                <Text className="text-xs text-white/40">
-                  Search for models to download GGUF weights.
+              {searchResults.length === 0 && !isSearching ? (
+                <Text className="text-sm text-white/40">
+                  Search for a Hugging Face repository. Atlas will pick a GGUF that matches the
+                  selected device profile when possible.
                 </Text>
               ) : (
-                searchResults.map((item) => renderResult({ item }))
+                searchResults.map((item) => {
+                  const downloading = downloadingModelId === item.id;
+                  return (
+                    <View
+                      key={item.id}
+                      className="mb-3 rounded-3xl border border-white/10 bg-white/5 p-4">
+                      <Text className="text-base font-semibold text-white">{item.modelId}</Text>
+                      <Text className="mt-1 text-xs text-white/40">
+                        Downloads: {item.downloads.toLocaleString()}
+                      </Text>
+                      <Pressable
+                        disabled={downloading}
+                        onPress={() => void downloadModel(item.modelId, item.id)}
+                        className={`mt-4 items-center rounded-2xl py-3 ${
+                          downloading ? 'bg-white/20' : 'bg-emerald-600'
+                        }`}>
+                        {downloading ? (
+                          <View className="flex-row items-center gap-2">
+                            <ActivityIndicator color="#ffffff" size="small" />
+                            <Text className="text-sm font-semibold text-white">
+                              {downloadProgress
+                                ? `${Math.round(downloadProgress * 100)}%`
+                                : 'Preparing'}
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text className="text-sm font-semibold text-white">Download GGUF</Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  );
+                })
               )}
             </ScrollView>
+
             <Pressable
               onPress={() => {
-                setShowHfSearch(false);
-                setSearchResults([]);
+                setShowSearch(false);
+                setSearchError(null);
               }}
-              className="mt-3 items-center rounded-2xl border border-white/20 bg-white/5 px-4 py-3">
+              className="mt-3 items-center rounded-2xl border border-white/10 bg-white/10 py-3">
               <Text className="text-sm font-semibold text-white">Close</Text>
             </Pressable>
           </View>
         </View>
       )}
-
-      <Pressable
-        onPress={() => setShowAddMenu((prev) => !prev)}
-        className="absolute bottom-6 right-6 z-30 rounded-full border border-emerald-500/50 bg-emerald-500/60 px-4 py-3">
-        <Text className="text-2xl font-bold text-white">+</Text>
-      </Pressable>
     </View>
   );
 }

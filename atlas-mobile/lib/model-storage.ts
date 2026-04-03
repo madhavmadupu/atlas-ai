@@ -1,4 +1,4 @@
-import { documentDirectory, makeDirectoryAsync } from 'expo-file-system';
+import { documentDirectory, makeDirectoryAsync } from 'expo-file-system/legacy';
 
 export const MODEL_DIR = `${documentDirectory ?? ''}atlas-models/`;
 

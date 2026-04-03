@@ -12,6 +12,7 @@ export default function Index() {
     isConnected,
     inferenceProvider,
     localModelPath,
+    localModelName,
     setInferenceProvider,
   } = useConnectionStore();
   const loadModels = useModelStore((s) => s.loadModels);
@@ -77,7 +78,7 @@ export default function Index() {
           Download or import a GGUF model. We store it locally and switch the inference provider.
         </Text>
         <Text className="mt-3 text-xs text-white/30">
-          Active model: {localModelPath ? localModelPath.split('/').pop() : 'none'}
+          Active model: {localModelName ?? (localModelPath ? localModelPath.split('/').pop() : 'none')}
         </Text>
         <Pressable
           onPress={goLocal}

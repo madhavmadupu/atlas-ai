@@ -1,3 +1,6 @@
+import { selectGgufForTier } from '@/lib/local-inference';
+import type { DevicePerformanceTier } from '@/lib/types';
+
 export interface HuggingFaceModelSummary {
   id: string;
   modelId: string;
@@ -55,9 +58,22 @@ export async function fetchModelFiles(
   return data.siblings ?? [];
 }
 
-export function pickBestGguf(files: HuggingFaceModelFile[]): HuggingFaceModelFile | null {
-  const ggufFiles = files
-    .filter((f) => f.rfilename.toLowerCase().endsWith('.gguf'))
-    .sort((a, b) => b.size - a.size);
-  return ggufFiles[0] ?? null;
+export function pickBestGguf(
+  files: HuggingFaceModelFile[],
+  tier: DevicePerformanceTier,
+  preferredQuantization?: string
+): HuggingFaceModelFile | null {
+  const ggufFiles = files.filter((f) => f.rfilename.toLowerCase().endsWith('.gguf'));
+  const preferredName = selectGgufForTier(
+    ggufFiles.map((file) => file.rfilename),
+    tier,
+    preferredQuantization
+  );
+
+  if (preferredName) {
+    const match = ggufFiles.find((file) => file.rfilename === preferredName);
+    if (match) return match;
+  }
+
+  return ggufFiles.sort((a, b) => a.size - b.size)[0] ?? null;
 }

@@ -16,6 +16,8 @@ export default function ShareScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ text?: string; url?: string; title?: string }>();
   const defaultModel = useConnectionStore((s) => s.defaultModel);
+  const inferenceProvider = useConnectionStore((s) => s.inferenceProvider);
+  const localModelName = useConnectionStore((s) => s.localModelName);
   const createConversation = useChatStore((s) => s.createConversation);
 
   const sharedContent = useMemo(
@@ -27,7 +29,10 @@ export default function ShareScreen() {
     let cancelled = false;
 
     async function go() {
-      const model = defaultModel ?? 'llama3.2:3b';
+      const model =
+        inferenceProvider === 'local'
+          ? (localModelName ?? 'On-device GGUF')
+          : (defaultModel ?? 'llama3.2:3b');
       const id = await createConversation(model);
       if (cancelled) return;
       router.replace({ pathname: '/chat/[id]', params: { id, prefill: sharedContent } });
@@ -37,7 +42,7 @@ export default function ShareScreen() {
     return () => {
       cancelled = true;
     };
-  }, [createConversation, defaultModel, router, sharedContent]);
+  }, [createConversation, defaultModel, inferenceProvider, localModelName, router, sharedContent]);
 
   return (
     <View className="flex-1 items-center justify-center bg-[#0a0a0a] px-6">

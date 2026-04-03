@@ -3,6 +3,7 @@ import { useChatStore } from '@/store/chat.store';
 import { useConnectionStore } from '@/store/connection.store';
 import { routes } from '@/lib/api';
 import { localLlamaEngine } from '@/lib/local-llama-engine';
+import { validateLocalChatModel } from '@/lib/model-validation';
 
 export function useStreamingResponse(conversationId: string | null) {
   const abortRef = useRef<AbortController | null>(null);
@@ -20,11 +21,16 @@ export function useStreamingResponse(conversationId: string | null) {
   const defaultModel = useConnectionStore((s) => s.defaultModel);
   const inferenceProvider = useConnectionStore((s) => s.inferenceProvider);
   const localModelPath = useConnectionStore((s) => s.localModelPath);
+  const localModelName = useConnectionStore((s) => s.localModelName);
+  const localSettings = useConnectionStore((s) => s.localSettings);
 
   const sendMessage = useCallback(
     async (content: string) => {
       let convId = conversationId;
-      const model = inferenceProvider === 'local' ? 'local' : (defaultModel ?? 'llama3.2:3b');
+      const model =
+        inferenceProvider === 'local'
+          ? (localModelName ?? 'On-device GGUF')
+          : (defaultModel ?? 'llama3.2:3b');
 
       if (!convId) {
         convId = await createConversation(model);
@@ -42,11 +48,28 @@ export function useStreamingResponse(conversationId: string | null) {
         if (inferenceProvider === 'local') {
           if (!localModelPath) {
             throw new Error(
-              'No local model selected. Go to Settings and set a local GGUF model path (file://...).'
+              'No local model selected. Download or import one from the Models page.'
             );
           }
 
-          await localLlamaEngine.chat(localModelPath, allMessages, appendStreamToken);
+          const validation = validateLocalChatModel([localModelName, localModelPath]);
+          if (!validation.isChatCapable) {
+            throw new Error(validation.reason);
+          }
+
+          const localMessages = localSettings.systemPrompt.trim()
+            ? [
+                { role: 'system' as const, content: localSettings.systemPrompt.trim() },
+                ...allMessages,
+              ]
+            : allMessages;
+
+          await localLlamaEngine.chat(
+            localModelPath,
+            localMessages,
+            localSettings,
+            appendStreamToken
+          );
           finishStreaming();
         } else {
           abortRef.current = new AbortController();
@@ -101,6 +124,8 @@ export function useStreamingResponse(conversationId: string | null) {
       defaultModel,
       inferenceProvider,
       localModelPath,
+      localModelName,
+      localSettings,
       messages,
       addUserMessage,
       startStreaming,

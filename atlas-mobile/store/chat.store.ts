@@ -1,12 +1,67 @@
 import { create } from 'zustand';
-import type { Conversation, Message } from '@/lib/types';
 import { routes } from '@/lib/api';
+import {
+  buildConversationTitle,
+  readLocalChatState,
+  writeLocalChatState,
+} from '@/lib/local-chat-storage';
+import type { Conversation, Message } from '@/lib/types';
+import { useConnectionStore } from '@/store/connection.store';
 
 function generateId(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
+  });
+}
+
+function isLocalProvider(): boolean {
+  return useConnectionStore.getState().inferenceProvider === 'local';
+}
+
+function sortConversations(conversations: Conversation[]): Conversation[] {
+  return [...conversations].sort(
+    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+  );
+}
+
+async function appendLocalMessage(message: Message): Promise<void> {
+  const state = await readLocalChatState();
+  const existingMessages = state.messagesByConversation[message.conversation_id] ?? [];
+  const nextMessages = [...existingMessages, message];
+
+  const conversations = state.conversations.map((conversation) => {
+    if (conversation.id !== message.conversation_id) return conversation;
+
+    const shouldRetitle =
+      message.role === 'user' &&
+      (conversation.title === 'New Conversation' || existingMessages.length === 0);
+
+    return {
+      ...conversation,
+      title: shouldRetitle ? buildConversationTitle(message.content) : conversation.title,
+      updated_at: message.created_at,
+    };
+  });
+
+  await writeLocalChatState({
+    conversations: sortConversations(conversations),
+    messagesByConversation: {
+      ...state.messagesByConversation,
+      [message.conversation_id]: nextMessages,
+    },
+  });
+}
+
+async function deleteLocalConversation(conversationId: string): Promise<void> {
+  const state = await readLocalChatState();
+  const messagesByConversation = { ...state.messagesByConversation };
+  delete messagesByConversation[conversationId];
+
+  await writeLocalChatState({
+    conversations: state.conversations.filter((conversation) => conversation.id !== conversationId),
+    messagesByConversation,
   });
 }
 
@@ -42,6 +97,12 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   error: null,
 
   loadConversations: async () => {
+    if (isLocalProvider()) {
+      const state = await readLocalChatState();
+      set({ conversations: sortConversations(state.conversations) });
+      return;
+    }
+
     try {
       const res = await fetch(routes.conversations());
       if (!res.ok) throw new Error('Failed');
@@ -53,6 +114,12 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   },
 
   loadMessages: async (conversationId: string) => {
+    if (isLocalProvider()) {
+      const state = await readLocalChatState();
+      set({ messages: state.messagesByConversation[conversationId] ?? [] });
+      return;
+    }
+
     try {
       const res = await fetch(routes.conversation(conversationId));
       if (!res.ok) throw new Error('Failed');
@@ -64,13 +131,15 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   },
 
   setActiveConversation: (id) => {
-    set({ activeConversationId: id, messages: [], streamingContent: '' });
-    if (id) get().loadMessages(id);
+    set({ activeConversationId: id, messages: [], streamingContent: '', error: null });
+    if (id) {
+      void get().loadMessages(id);
+    }
   },
 
   createConversation: async (model: string) => {
-    const id = generateId();
     const now = new Date().toISOString();
+    const id = generateId();
     const conversation: Conversation = {
       id,
       title: 'New Conversation',
@@ -78,6 +147,27 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
       created_at: now,
       updated_at: now,
     };
+
+    if (isLocalProvider()) {
+      const state = await readLocalChatState();
+      const conversations = sortConversations([conversation, ...state.conversations]);
+      await writeLocalChatState({
+        conversations,
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [id]: [],
+        },
+      });
+
+      set({
+        conversations,
+        activeConversationId: id,
+        messages: [],
+        streamingContent: '',
+        error: null,
+      });
+      return id;
+    }
 
     try {
       await fetch(routes.conversations(), {
@@ -92,7 +182,7 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
         }),
       });
     } catch {
-      // Continue with local state
+      // Continue with local state while the desktop is unreachable.
     }
 
     set((state) => ({
@@ -100,20 +190,27 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
       activeConversationId: id,
       messages: [],
       streamingContent: '',
+      error: null,
     }));
     return id;
   },
 
   deleteConversation: async (id: string) => {
-    try {
-      await fetch(routes.conversation(id), { method: 'DELETE' });
-    } catch {
-      // Continue
+    if (isLocalProvider()) {
+      await deleteLocalConversation(id);
+    } else {
+      try {
+        await fetch(routes.conversation(id), { method: 'DELETE' });
+      } catch {
+        // Continue with local state.
+      }
     }
+
     set((state) => ({
-      conversations: state.conversations.filter((c) => c.id !== id),
+      conversations: state.conversations.filter((conversation) => conversation.id !== id),
       activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
       messages: state.activeConversationId === id ? [] : state.messages,
+      streamingContent: state.activeConversationId === id ? '' : state.streamingContent,
     }));
   },
 
@@ -125,7 +222,30 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
       content,
       created_at: new Date().toISOString(),
     };
-    set((state) => ({ messages: [...state.messages, msg] }));
+
+    set((state) => {
+      const conversations = state.conversations.map((conversation) =>
+        conversation.id === msg.conversation_id
+          ? {
+              ...conversation,
+              title:
+                conversation.title === 'New Conversation'
+                  ? buildConversationTitle(content)
+                  : conversation.title,
+              updated_at: msg.created_at,
+            }
+          : conversation
+      );
+
+      return {
+        conversations: sortConversations(conversations),
+        messages: [...state.messages, msg],
+      };
+    });
+
+    if (isLocalProvider()) {
+      void appendLocalMessage(msg);
+    }
   },
 
   startStreaming: () => {
@@ -138,21 +258,35 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
 
   finishStreaming: () => {
     const { streamingContent, activeConversationId, messages } = get();
-    if (streamingContent) {
-      const assistantMsg: Message = {
-        id: generateId(),
-        conversation_id: activeConversationId ?? '',
-        role: 'assistant',
-        content: streamingContent,
-        created_at: new Date().toISOString(),
-      };
-      set({
-        messages: [...messages, assistantMsg],
-        isStreaming: false,
-        streamingContent: '',
-      });
-    } else {
+
+    if (!streamingContent) {
       set({ isStreaming: false, streamingContent: '' });
+      return;
+    }
+
+    const assistantMessage: Message = {
+      id: generateId(),
+      conversation_id: activeConversationId ?? '',
+      role: 'assistant',
+      content: streamingContent,
+      created_at: new Date().toISOString(),
+    };
+
+    set((state) => ({
+      conversations: sortConversations(
+        state.conversations.map((conversation) =>
+          conversation.id === assistantMessage.conversation_id
+            ? { ...conversation, updated_at: assistantMessage.created_at }
+            : conversation
+        )
+      ),
+      messages: [...messages, assistantMessage],
+      isStreaming: false,
+      streamingContent: '',
+    }));
+
+    if (isLocalProvider()) {
+      void appendLocalMessage(assistantMessage);
     }
   },
 
@@ -161,6 +295,6 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   },
 
   clearMessages: () => {
-    set({ messages: [], streamingContent: '' });
+    set({ messages: [], streamingContent: '', error: null });
   },
 }));

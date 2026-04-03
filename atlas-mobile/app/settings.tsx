@@ -1,159 +1,314 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  ScrollView,
   ActivityIndicator,
   Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { getTierLabel } from '@/lib/local-inference';
+import type { DevicePerformanceTier } from '@/lib/types';
 import { useConnectionStore } from '@/store/connection.store';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const {
+    connectToDesktop,
+    defaultModel,
     desktopIP,
     desktopPort,
-    isConnected,
-    defaultModel,
-    inferenceProvider,
-    localModelPath,
-    huggingFaceToken,
-    connectToDesktop,
     disconnect,
-    setInferenceProvider,
-    setLocalModel,
+    huggingFaceToken,
+    inferenceProvider,
+    isConnected,
+    localModelName,
+    localSettings,
     setHuggingFaceToken,
+    setInferenceProvider,
+    updateLocalSettings,
+    applyLocalTier,
   } = useConnectionStore();
 
   const [ip, setIp] = useState(desktopIP ?? '');
   const [port, setPort] = useState(String(desktopPort));
   const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
-  const [localPath, setLocalPath] = useState(localModelPath ?? '');
   const [hfTokenInput, setHfTokenInput] = useState(huggingFaceToken ?? '');
+  const [systemPrompt, setSystemPrompt] = useState(localSettings.systemPrompt);
+  const [temperature, setTemperature] = useState(String(localSettings.temperature));
+  const [topP, setTopP] = useState(String(localSettings.topP));
+  const [maxTokens, setMaxTokens] = useState(String(localSettings.maxTokens));
+  const [contextSize, setContextSize] = useState(String(localSettings.contextSize));
+  const [gpuLayers, setGpuLayers] = useState(String(localSettings.gpuLayers));
 
-  const handleTestConnection = async () => {
-    setIsTesting(true);
-    setTestResult(null);
+  useEffect(() => {
+    setSystemPrompt(localSettings.systemPrompt);
+    setTemperature(String(localSettings.temperature));
+    setTopP(String(localSettings.topP));
+    setMaxTokens(String(localSettings.maxTokens));
+    setContextSize(String(localSettings.contextSize));
+    setGpuLayers(String(localSettings.gpuLayers));
+  }, [localSettings]);
 
-    const success = await connectToDesktop(ip.trim(), parseInt(port, 10) || 3001);
-    setTestResult(success ? 'success' : 'fail');
-    setIsTesting(false);
-  };
+  useEffect(() => {
+    setHfTokenInput(huggingFaceToken ?? '');
+  }, [huggingFaceToken]);
 
-  const handleSave = async () => {
-    if (inferenceProvider === 'local') {
-      const trimmed = localPath.trim();
-      if (!trimmed.startsWith('file://')) {
-        Alert.alert('Error', 'Local model path must be a file URI starting with file://');
-        return;
-      }
-      setLocalModel({ path: trimmed, name: null });
-      Alert.alert('Saved', 'Local model path saved.');
-      return;
-    }
-
+  const saveDesktop = async () => {
     const trimmedIp = ip.trim();
     if (!trimmedIp) {
-      Alert.alert('Error', 'Please enter an IP address');
+      Alert.alert('Missing IP', 'Enter the desktop IP address first.');
       return;
     }
 
-    const success = await connectToDesktop(trimmedIp, parseInt(port, 10) || 3001);
-    if (success) {
-      Alert.alert('Connected', 'Successfully connected to Atlas AI Desktop.');
-    } else {
-      Alert.alert('Connection Failed', 'Could not connect to the desktop. Check the IP and port.');
+    setIsTesting(true);
+    try {
+      const ok = await connectToDesktop(trimmedIp, parseInt(port, 10) || 3001);
+      Alert.alert(
+        ok ? 'Connected' : 'Connection failed',
+        ok ? 'Desktop connection saved.' : 'Atlas AI Desktop was not reachable at that IP and port.'
+      );
+    } finally {
+      setIsTesting(false);
     }
   };
 
-  const handleDisconnect = () => {
-    Alert.alert('Disconnect', 'Disconnect from the desktop?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Disconnect',
-        style: 'destructive',
-        onPress: () => {
-          disconnect();
-          router.replace('/connect');
-        },
-      },
-    ]);
+  const saveLocalSettings = () => {
+    const parsedTemperature = Number(temperature);
+    const parsedTopP = Number(topP);
+    const parsedMaxTokens = Number(maxTokens);
+    const parsedContext = Number(contextSize);
+    const parsedGpuLayers = Number(gpuLayers);
+
+    if (
+      Number.isNaN(parsedTemperature) ||
+      Number.isNaN(parsedTopP) ||
+      Number.isNaN(parsedMaxTokens) ||
+      Number.isNaN(parsedContext) ||
+      Number.isNaN(parsedGpuLayers)
+    ) {
+      Alert.alert('Invalid values', 'All local inference fields must be numeric.');
+      return;
+    }
+
+    updateLocalSettings({
+      systemPrompt: systemPrompt.trim(),
+      temperature: parsedTemperature,
+      topP: parsedTopP,
+      maxTokens: parsedMaxTokens,
+      contextSize: parsedContext,
+      gpuLayers: parsedGpuLayers,
+    });
+
+    Alert.alert('Saved', 'Local inference settings updated.');
   };
 
-  const handleSaveToken = () => {
+  const saveToken = () => {
     setHuggingFaceToken(hfTokenInput.trim() || null);
-    Alert.alert('Saved', 'Hugging Face token stored for gated downloads.');
+    Alert.alert('Saved', 'Hugging Face token updated.');
+  };
+
+  const renderTierButton = (tier: DevicePerformanceTier) => {
+    const active = tier === localSettings.performanceTier;
+    return (
+      <Pressable
+        key={tier}
+        onPress={() => applyLocalTier(tier)}
+        className={`flex-1 rounded-2xl border px-3 py-3 ${
+          active ? 'border-emerald-500/40 bg-emerald-500/15' : 'border-white/10 bg-white/5'
+        }`}>
+        <Text className="text-center text-sm font-semibold text-white">{getTierLabel(tier)}</Text>
+        <Text className="mt-1 text-center text-xs text-white/40">
+          {tier === 'low' ? 'Battery first' : tier === 'medium' ? 'Balanced' : 'Quality first'}
+        </Text>
+      </Pressable>
+    );
   };
 
   return (
-    <ScrollView className="flex-1 bg-[#0a0a0a]" contentContainerStyle={{ padding: 24 }}>
-      {/* Connection Status */}
-      <View className="mb-6 rounded-xl border border-white/10 bg-white/5 p-4">
+    <ScrollView
+      className="flex-1 bg-[#0a0a0a]"
+      contentContainerStyle={{ padding: 20, paddingBottom: 36 }}>
+      <View className="mb-5 rounded-3xl border border-white/10 bg-white/5 p-4">
         <View className="flex-row items-center justify-between">
-          <Text className="text-sm font-medium text-white/60">Connection Status</Text>
-          <View className="flex-row items-center gap-2">
-            <View
-              className={`h-2.5 w-2.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`}
-            />
-            <Text className={`text-sm ${isConnected ? 'text-emerald-400' : 'text-red-400'}`}>
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </Text>
-          </View>
+          <Text className="text-lg font-semibold text-white">Inference provider</Text>
+          <Text className="text-xs text-white/40">
+            Active: {inferenceProvider === 'local' ? 'On-device' : 'Desktop'}
+          </Text>
+        </View>
+        <Text className="mt-2 text-sm leading-5 text-white/40">
+          Desktop mode keeps the existing LAN flow. On-device mode runs a local GGUF through
+          `llama.rn` so chat still works offline.
+        </Text>
+        <View className="mt-4 flex-row gap-3">
+          <Pressable
+            onPress={() => setInferenceProvider('desktop')}
+            className={`flex-1 rounded-2xl border py-3 ${
+              inferenceProvider === 'desktop'
+                ? 'border-blue-500/40 bg-blue-500/15'
+                : 'border-white/10 bg-white/5'
+            }`}>
+            <Text className="text-center text-sm font-semibold text-white">Desktop</Text>
+            <Text className="mt-1 text-center text-xs text-white/40">Ollama over Wi-Fi</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setInferenceProvider('local')}
+            className={`flex-1 rounded-2xl border py-3 ${
+              inferenceProvider === 'local'
+                ? 'border-emerald-500/40 bg-emerald-500/15'
+                : 'border-white/10 bg-white/5'
+            }`}>
+            <Text className="text-center text-sm font-semibold text-white">On-device</Text>
+            <Text className="mt-1 text-center text-xs text-white/40">Offline llama.cpp</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View className="mb-5 rounded-3xl border border-white/10 bg-white/5 p-4">
+        <View className="flex-row items-center justify-between">
+          <Text className="text-lg font-semibold text-white">Desktop connection</Text>
+          <Text className={`text-xs ${isConnected ? 'text-emerald-300' : 'text-white/40'}`}>
+            {isConnected ? 'Connected' : 'Disconnected'}
+          </Text>
         </View>
         {defaultModel && (
-          <Text className="mt-2 text-xs text-white/30">Active model: {defaultModel}</Text>
+          <Text className="mt-1 text-xs text-white/40">Desktop default model: {defaultModel}</Text>
         )}
+        <TextInput
+          value={ip}
+          onChangeText={setIp}
+          placeholder="192.168.1.100"
+          placeholderTextColor="rgba(255,255,255,0.3)"
+          keyboardType="decimal-pad"
+          className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
+        />
+        <TextInput
+          value={port}
+          onChangeText={setPort}
+          placeholder="3001"
+          placeholderTextColor="rgba(255,255,255,0.3)"
+          keyboardType="number-pad"
+          className="mt-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
+        />
+        <View className="mt-4 flex-row gap-3">
+          <Pressable
+            onPress={() => void saveDesktop()}
+            className="flex-1 items-center rounded-2xl bg-blue-600 py-3">
+            {isTesting ? (
+              <ActivityIndicator color="#ffffff" size="small" />
+            ) : (
+              <Text className="text-sm font-semibold text-white">Test and save</Text>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              disconnect();
+              Alert.alert('Disconnected', 'Desktop endpoint cleared.');
+            }}
+            className="flex-1 items-center rounded-2xl border border-white/10 bg-white/10 py-3">
+            <Text className="text-sm font-semibold text-white">Disconnect</Text>
+          </Pressable>
+        </View>
       </View>
 
-      {/* Inference Provider */}
-      <Text className="mb-3 text-base font-semibold text-white">Inference</Text>
-      <Text className="mb-4 text-sm leading-5 text-white/40">
-        Choose whether to run the model on your desktop (Ollama over Wi-Fi) or directly on-device
-        using llama.cpp via llama.rn (requires a custom dev client / native build).
-      </Text>
-
-      <View className="mb-6 flex-row gap-3">
-        <Pressable
-          onPress={() => setInferenceProvider('desktop')}
-          className={`flex-1 items-center rounded-xl border py-3 ${
-            inferenceProvider === 'desktop'
-              ? 'border-emerald-500/30 bg-emerald-500/10'
-              : 'border-white/10 bg-white/5'
-          }`}>
-          <Text className="text-sm font-semibold text-white">Desktop</Text>
-          <Text className="mt-1 text-xs text-white/40">Ollama</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setInferenceProvider('local')}
-          className={`flex-1 items-center rounded-xl border py-3 ${
-            inferenceProvider === 'local'
-              ? 'border-emerald-500/30 bg-emerald-500/10'
-              : 'border-white/10 bg-white/5'
-          }`}>
-          <Text className="text-sm font-semibold text-white">On-device</Text>
-          <Text className="mt-1 text-xs text-white/40">llama.cpp</Text>
-        </Pressable>
-      </View>
-
-      <View className="mb-6">
-        <Text className="mb-2 text-sm font-medium text-white/60">Model management</Text>
-        <Text className="mb-2 text-xs text-white/40">
-          Download GGUF weights from Hugging Face or import files, then run them locally on-device.
+      <View className="mb-5 rounded-3xl border border-white/10 bg-white/5 p-4">
+        <Text className="text-lg font-semibold text-white">On-device model</Text>
+        <Text className="mt-2 text-sm text-white/40">
+          Selected model: {localModelName ?? 'None yet'}
         </Text>
+        <Text className="mt-1 text-xs text-white/40">
+          Current profile: {getTierLabel(localSettings.performanceTier)}
+        </Text>
+        <View className="mt-4 flex-row gap-3">
+          {(['low', 'medium', 'high'] as DevicePerformanceTier[]).map(renderTierButton)}
+        </View>
         <Pressable
           onPress={() => router.push('/models')}
-          className="items-center rounded-xl border border-white/10 bg-white/5 py-3">
-          <Text className="text-sm font-semibold text-white">Manage on-device models</Text>
+          className="mt-4 items-center rounded-2xl border border-emerald-500/40 bg-emerald-500/10 py-3">
+          <Text className="text-sm font-semibold text-white">Open model manager</Text>
         </Pressable>
       </View>
 
-      <View className="mb-6">
-        <Text className="mb-2 text-sm font-medium text-white/60">Hugging Face Token</Text>
+      <View className="mb-5 rounded-3xl border border-white/10 bg-white/5 p-4">
+        <Text className="text-lg font-semibold text-white">Local inference settings</Text>
+        <Text className="mt-2 text-sm leading-5 text-white/40">
+          These values are used when the app runs the model locally through `llama.rn`.
+        </Text>
+
+        <Text className="mt-4 text-xs font-medium uppercase tracking-wide text-white/50">
+          System prompt
+        </Text>
+        <TextInput
+          value={systemPrompt}
+          onChangeText={setSystemPrompt}
+          placeholder="You are Atlas AI..."
+          placeholderTextColor="rgba(255,255,255,0.3)"
+          multiline
+          className="mt-2 min-h-[110px] rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
+          style={{ textAlignVertical: 'top' }}
+        />
+
+        <Text className="mt-4 text-xs font-medium uppercase tracking-wide text-white/50">
+          Temperature
+        </Text>
+        <TextInput
+          value={temperature}
+          onChangeText={setTemperature}
+          keyboardType="decimal-pad"
+          className="mt-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
+        />
+
+        <Text className="mt-4 text-xs font-medium uppercase tracking-wide text-white/50">
+          Top P
+        </Text>
+        <TextInput
+          value={topP}
+          onChangeText={setTopP}
+          keyboardType="decimal-pad"
+          className="mt-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
+        />
+
+        <Text className="mt-4 text-xs font-medium uppercase tracking-wide text-white/50">
+          Max response tokens
+        </Text>
+        <TextInput
+          value={maxTokens}
+          onChangeText={setMaxTokens}
+          keyboardType="number-pad"
+          className="mt-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
+        />
+
+        <Text className="mt-4 text-xs font-medium uppercase tracking-wide text-white/50">
+          Context size
+        </Text>
+        <TextInput
+          value={contextSize}
+          onChangeText={setContextSize}
+          keyboardType="number-pad"
+          className="mt-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
+        />
+
+        <Text className="mt-4 text-xs font-medium uppercase tracking-wide text-white/50">
+          GPU layers
+        </Text>
+        <TextInput
+          value={gpuLayers}
+          onChangeText={setGpuLayers}
+          keyboardType="number-pad"
+          className="mt-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
+        />
+
+        <Pressable
+          onPress={saveLocalSettings}
+          className="mt-5 items-center rounded-2xl bg-emerald-600 py-3">
+          <Text className="text-sm font-semibold text-white">Save local settings</Text>
+        </Pressable>
+      </View>
+
+      <View className="rounded-3xl border border-white/10 bg-white/5 p-4">
+        <Text className="text-lg font-semibold text-white">Download access</Text>
         <TextInput
           value={hfTokenInput}
           onChangeText={setHfTokenInput}
@@ -161,137 +316,13 @@ export default function SettingsScreen() {
           placeholderTextColor="rgba(255,255,255,0.3)"
           autoCapitalize="none"
           autoCorrect={false}
-          className="mb-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm text-white"
+          className="mt-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
         />
         <Pressable
-          onPress={handleSaveToken}
-          className="items-center rounded-xl border border-white/10 bg-emerald-500/20 py-3">
-          <Text className="text-sm font-semibold text-white">Save token</Text>
+          onPress={saveToken}
+          className="mt-4 items-center rounded-2xl border border-white/10 bg-white/10 py-3">
+          <Text className="text-sm font-semibold text-white">Save Hugging Face token</Text>
         </Pressable>
-        {huggingFaceToken && (
-          <Text className="mt-2 text-xs text-white/40">Token configured for gated downloads.</Text>
-        )}
-        <Text className="mt-2 text-xs text-white/40">
-          This token is only needed if the model requires gated access; keep it even when using the
-          desktop provider.
-        </Text>
-      </View>
-
-      {inferenceProvider === 'local' ? (
-        <View className="mb-8 rounded-xl border border-white/10 bg-white/5 p-4">
-          <Text className="mb-2 text-sm font-medium text-white/70">Local GGUF Model Path</Text>
-          <Text className="mb-3 text-xs leading-4 text-white/40">
-            Provide a `file://` URI for the GGUF you picked on the Models screen (or import it from
-            Files).
-          </Text>
-          <TextInput
-            value={localPath}
-            onChangeText={(v) => setLocalPath(v)}
-            placeholder="file://.../model.gguf"
-            placeholderTextColor="rgba(255,255,255,0.3)"
-            autoCapitalize="none"
-            autoCorrect={false}
-            className="rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white"
-          />
-          <Pressable
-            onPress={handleSave}
-            className="mt-4 items-center rounded-xl border border-emerald-400/50 bg-emerald-500/10 py-3">
-            <Text className="text-sm font-semibold text-white">Save local model</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <>
-          <Text className="mb-3 text-base font-semibold text-white">API Endpoint</Text>
-          <Text className="mb-4 text-sm leading-5 text-white/40">
-            Configure the desktop IP address and port. The desktop shows its LAN IP in the server
-            logs when it starts.
-          </Text>
-
-          <View className="mb-4">
-            <Text className="mb-2 text-sm font-medium text-white/60">IP Address</Text>
-            <TextInput
-              value={ip}
-              onChangeText={(v) => {
-                setIp(v);
-                setTestResult(null);
-              }}
-              placeholder="e.g. 192.168.1.100"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              keyboardType="decimal-pad"
-              autoCapitalize="none"
-              autoCorrect={false}
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-base text-white"
-            />
-          </View>
-
-          <View className="mb-6">
-            <Text className="mb-2 text-sm font-medium text-white/60">Port</Text>
-            <TextInput
-              value={port}
-              onChangeText={(v) => {
-                setPort(v);
-                setTestResult(null);
-              }}
-              placeholder="3001"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              keyboardType="number-pad"
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-base text-white"
-            />
-          </View>
-
-          {testResult && (
-            <View
-              className={`mb-4 rounded-xl border px-4 py-3 ${
-                testResult === 'success'
-                  ? 'border-emerald-500/20 bg-emerald-500/10'
-                  : 'border-red-500/20 bg-red-500/10'
-              }`}>
-              <Text
-                className={`text-sm ${testResult === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
-                {testResult === 'success'
-                  ? 'Connection successful!'
-                  : 'Connection failed. Check IP and port.'}
-              </Text>
-            </View>
-          )}
-
-          <View className="mb-4 flex-row gap-3">
-            <Pressable
-              onPress={handleTestConnection}
-              disabled={isTesting}
-              className="flex-1 items-center rounded-xl border border-white/10 bg-white/5 py-3 active:bg-white/10">
-              {isTesting ? (
-                <ActivityIndicator color="#ffffff" size="small" />
-              ) : (
-                <Text className="text-sm font-medium text-white/70">Test Connection</Text>
-              )}
-            </Pressable>
-            <Pressable
-              onPress={handleSave}
-              className="flex-1 items-center rounded-xl bg-indigo-600 py-3 active:bg-indigo-700">
-              <Text className="text-sm font-semibold text-white">Save & Connect</Text>
-            </Pressable>
-          </View>
-        </>
-      )}
-
-      {/* Disconnect */}
-      {isConnected && (
-        <Pressable
-          onPress={handleDisconnect}
-          className="mt-2 items-center rounded-xl border border-red-500/20 py-3 active:bg-red-500/10">
-          <Text className="text-sm font-medium text-red-400">Disconnect</Text>
-        </Pressable>
-      )}
-
-      {/* About */}
-      <View className="mt-10 rounded-xl border border-white/10 bg-white/5 p-4">
-        <Text className="text-sm font-medium text-white/80">Atlas AI Mobile</Text>
-        <Text className="mt-1 text-xs text-white/40">Version 1.0.0</Text>
-        <Text className="mt-3 text-xs leading-4 text-white/30">
-          Connects to Atlas AI Desktop over your local Wi-Fi network. No internet required. Your
-          conversations never leave your network.
-        </Text>
       </View>
     </ScrollView>
   );
