@@ -1,118 +1,111 @@
 # Atlas AI — Project Overview
 
-## What is Atlas AI?
+## What Atlas AI is
 
-Atlas AI is a **completely offline, privacy-first AI chatbot** that runs entirely on the user's own hardware. No data ever leaves the device. No cloud. No accounts. No telemetry.
+Atlas AI is a privacy-first local AI project with two user-facing apps:
 
-It has two surfaces:
-1. **Desktop app** — Electron + Next.js. This is the "brain" — it bundles and runs the local LLM via Ollama, exposes a local API, and has its own full chat UI.
-2. **Mobile app** — Expo + React Native. This is the "client" — a polished mobile chat interface that connects to the desktop over Wi-Fi LAN. It does NOT run any model locally.
+1. `atlas-desktop/` — the desktop app. It runs Ollama locally, exposes a Fastify API on port `3001`, and stores desktop-side conversations/settings in SQLite.
+2. `atlas-mobile/` — the mobile app. It supports two inference providers:
+   - `desktop` — connect to the desktop over local Wi-Fi and use the desktop Fastify API.
+   - `local` — run a GGUF model directly on the phone with `llama.rn` / `llama.cpp`.
 
-## Core Principles (never violate these)
+The project is offline-first:
 
-1. **Zero network calls** — No request ever goes to an external server. No analytics, no crash reporting, no model telemetry. The only network traffic is local LAN between desktop and phone.
-2. **No accounts** — Users never sign in to anything.
-3. **No cloud storage** — Everything is stored on-device in SQLite.
-4. **One-click setup** — User downloads the desktop app, clicks "Download Model", waits, then starts chatting. Nothing else required.
-5. **Streaming responses** — All LLM responses stream token by token via SSE (Server-Sent Events).
+- No cloud APIs
+- No telemetry
+- No account system
+- No data leaves the local machine or local phone unless the user explicitly downloads a model file
 
-## Repository Structure
+## Current repository layout
 
-This is a **Turborepo monorepo**.
+This repo is currently a two-app workspace, not a Turborepo monorepo:
 
-```
+```text
 atlas-ai/
-├── apps/
-│   ├── desktop/          # Electron + Next.js desktop app
-│   └── mobile/           # Expo + React Native mobile app
-├── packages/
-│   ├── shared/           # Shared types, utilities, constants
-│   ├── ui/               # Shared React Native + web UI components (NativeWind)
-│   └── db/               # SQLite schema, migrations, query helpers
-├── turbo.json
-├── package.json
-└── .cursor/              # Cursor IDE rules
+├── atlas-desktop/
+│   ├── atlas-web/        # Next.js desktop UI
+│   ├── electron/         # Electron main/preload/sidecar
+│   └── server/           # Fastify API + SQLite access
+├── atlas-mobile/
+│   ├── app/              # Expo Router screens
+│   ├── components/       # React Native UI
+│   ├── hooks/            # Mobile hooks
+│   ├── lib/              # API, llama, model, validation utilities
+│   ├── store/            # Zustand stores
+│   └── android/          # Generated native Android project after prebuild
+└── docs/
 ```
 
-## Tech Stack
+## Mobile architecture
 
-| Layer | Technology | Notes |
+The mobile app is no longer a thin LAN-only client.
+
+It now has two operating modes:
+
+### 1. Desktop mode
+
+- Connects to the desktop Fastify API over Wi-Fi
+- Uses the desktop conversation list and desktop message history
+- Sends chat requests to `http://[desktop-ip]:3001/api/chat`
+- Streams responses from the desktop API
+- Can be exercised in Expo Go for UI/network iteration
+
+### 2. On-device mode
+
+- Runs a local GGUF model through `llama.rn`
+- Stores downloaded/imported GGUF files in the app sandbox
+- Persists local conversations and local messages in AsyncStorage
+- Persists local inference settings in AsyncStorage
+- Requires a development build or release build
+- Does **not** work in Expo Go
+
+## Tech stack
+
+| Area | Technology | Notes |
 |---|---|---|
-| Desktop shell | Electron 32 | Cross-platform: Windows, macOS, Linux |
-| Desktop UI | Next.js 14 (App Router) | Served inside Electron BrowserWindow |
-| Desktop styling | Tailwind CSS + shadcn/ui | Dark mode default |
-| LLM runtime | Ollama | Bundled as sidecar binary in Electron extraResources |
-| Mobile | Expo SDK 51 + React Native 0.74 | iOS + Android |
-| Mobile styling | NativeWind v4 | Tailwind for React Native |
-| API bridge | Fastify 4 | Runs on localhost:3001, also LAN-exposed |
-| State management | Zustand 4 | Both desktop and mobile |
-| Database | SQLite via better-sqlite3 | Desktop only. Chat history, config, conversations |
-| Monorepo | Turborepo | Shared packages across apps |
-| Language | TypeScript 5.5 throughout | Strict mode everywhere |
+| Desktop shell | Electron | Runs the desktop app |
+| Desktop UI | Next.js | Inside Electron |
+| Desktop API | Fastify | Port `3001` |
+| Desktop model runtime | Ollama | Local desktop inference |
+| Desktop persistence | SQLite | Desktop only |
+| Mobile app | Expo SDK 54 + React Native 0.81 | iOS + Android |
+| Mobile on-device inference | `llama.rn` | Native `llama.cpp` binding |
+| Mobile styling | NativeWind | Tailwind-style RN classes |
+| Mobile state | Zustand | Connection, chat, model stores |
+| Mobile local persistence | AsyncStorage + Expo FileSystem | Conversations/settings + GGUF storage |
 
-## How the System Works (end-to-end)
+## Mobile implementation highlights
 
-```
-[User types message in Desktop UI]
-        ↓
-[Next.js chat page] → POST /api/chat → [Fastify local API]
-        ↓
-[Fastify] → POST http://localhost:11434/api/chat → [Ollama]
-        ↓
-[Ollama streams tokens back to Fastify via ndjson]
-        ↓
-[Fastify pipes tokens as SSE back to Next.js]
-        ↓
-[Next.js renders streaming tokens in chat bubble]
-        ↓
-[Message saved to SQLite when stream ends]
-```
+- `atlas-mobile/app/index.tsx` lets the user choose desktop mode or on-device mode.
+- `atlas-mobile/app/models.tsx` manages local GGUF import/download and device-tier recommendations.
+- `atlas-mobile/app/settings.tsx` configures desktop endpoint, provider selection, Hugging Face token, and local inference settings.
+- `atlas-mobile/store/connection.store.ts` persists provider selection, active local model, and local generation settings.
+- `atlas-mobile/store/chat.store.ts` switches between desktop-backed conversations and local AsyncStorage-backed conversations.
+- `atlas-mobile/hooks/useStreamingResponse.ts` routes chat to either Fastify or `llama.rn`.
+- `atlas-mobile/lib/model-validation.ts` blocks unsupported GGUFs such as embedding, reranker, and `mmproj` files.
 
-For mobile:
-```
-[User types on phone]
-        ↓
-[Expo app] → POST http://[desktop-LAN-ip]:3001/api/chat
-        ↓
-[Same Fastify server on desktop handles it]
-        ↓
-[SSE streams back to mobile over Wi-Fi]
-```
+## Important operational rules
 
-## What the Agentic IDE Should Know
+- Use chat or instruct GGUF models for on-device chat.
+- Do **not** use embedding models, reranker models, or multimodal projector files as the active chat model.
+- Expo Go is valid for desktop-mode UI work, but not for local-model inference.
+- Android builds for the mobile dev client should use JDK 21.
 
-- **Always use TypeScript strict mode**. No `any` types without explicit comment explaining why.
-- **Never add external API calls**. If a feature needs data, it comes from SQLite or the local Ollama instance.
-- **All async DB operations** use better-sqlite3's synchronous API (it's sync by design, runs in a worker in Electron).
-- **Electron main process** handles: spawning Ollama sidecar, SQLite access, system tray, app lifecycle.
-- **Electron renderer process** (Next.js) handles: all UI, chat logic, model management UI.
-- **IPC** between main and renderer uses typed ipcMain/ipcRenderer with a preload bridge — no nodeIntegration in renderer.
-- **Mobile** never directly accesses SQLite — it goes through the Fastify API on desktop.
-- **Streaming** always uses SSE (text/event-stream), never WebSockets. Simpler and works with standard fetch.
-- **Models** are stored in `~/.ollama/models` (Ollama's default). Never move or copy models — just reference them by name.
+## Build/run summary
 
-## File Naming Conventions
+### Desktop mode
 
-- React components: `PascalCase.tsx`
-- Utilities/hooks: `camelCase.ts`
-- API routes (Next.js): `route.ts` inside `app/api/...`
-- Fastify routes: `[resource].routes.ts`
-- Database queries: `[resource].queries.ts`
-- Types: `[resource].types.ts`
-- Constants: `SCREAMING_SNAKE_CASE` for values, `camelCase` for config objects
+- Start the desktop app and Fastify API
+- Point the phone at the desktop IP
+- Use the mobile app in `desktop` provider mode
 
-## Environment Variables
+### On-device mode
 
-Desktop app uses `.env.local` (never committed):
-```
-OLLAMA_HOST=http://localhost:11434
-LOCAL_API_PORT=3001
-NEXT_PUBLIC_LOCAL_API=http://localhost:3001
+```bash
+cd atlas-mobile
+npx expo prebuild --clean
+npx expo run:android
+npx expo start --dev-client
 ```
 
-Mobile app uses `.env` (never committed):
-```
-EXPO_PUBLIC_DEFAULT_DESKTOP_PORT=3001
-```
-
-No secrets. No API keys. Everything is local.
+Then open the installed `Atlas AI` app, not Expo Go.
