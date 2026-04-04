@@ -80,7 +80,7 @@ interface ChatActions {
   setActiveConversation: (id: string | null) => void;
   createConversation: (model: string) => Promise<string>;
   deleteConversation: (id: string) => Promise<void>;
-  addUserMessage: (content: string) => void;
+  addUserMessage: (content: string, conversationId?: string | null) => void;
   startStreaming: () => void;
   appendStreamToken: (token: string) => void;
   finishStreaming: () => void;
@@ -214,10 +214,10 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
     }));
   },
 
-  addUserMessage: (content: string) => {
+  addUserMessage: (content: string, conversationId) => {
     const msg: Message = {
       id: generateId(),
-      conversation_id: get().activeConversationId ?? '',
+      conversation_id: conversationId ?? get().activeConversationId ?? '',
       role: 'user',
       content,
       created_at: new Date().toISOString(),

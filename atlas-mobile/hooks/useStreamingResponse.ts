@@ -36,7 +36,7 @@ export function useStreamingResponse(conversationId: string | null) {
         convId = await createConversation(model);
       }
 
-      addUserMessage(content);
+      addUserMessage(content, convId);
       startStreaming();
 
       const allMessages = [

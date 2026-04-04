@@ -47,6 +47,7 @@ export default function ModelsScreen() {
   const [searchResults, setSearchResults] = useState<HuggingFaceModelSummary[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isEditingToken, setIsEditingToken] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
@@ -287,7 +288,16 @@ export default function ModelsScreen() {
         </View>
 
         <View className="mb-4 rounded-3xl border border-white/10 bg-white/5 p-4">
-          <Text className="text-sm font-medium text-white/60">Hugging Face token</Text>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-sm font-medium text-white/60">Hugging Face token</Text>
+            <Pressable
+              onPress={() => setIsEditingToken((current) => !current)}
+              className="rounded-full border border-white/10 bg-white/10 px-3 py-2">
+              <Text className="text-xs font-semibold uppercase tracking-[1.2px] text-white">
+                {isEditingToken ? 'Lock' : 'Edit'}
+              </Text>
+            </Pressable>
+          </View>
           <TextInput
             value={hfTokenInput}
             onChangeText={setHfTokenInput}
@@ -295,14 +305,26 @@ export default function ModelsScreen() {
             placeholderTextColor="rgba(255,255,255,0.3)"
             autoCapitalize="none"
             autoCorrect={false}
-            className="mt-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white"
+            editable={isEditingToken}
+            className={`mt-3 rounded-2xl border px-4 py-3 text-sm text-white ${
+              isEditingToken ? 'border-white/10 bg-black/20' : 'border-white/5 bg-white/[0.03]'
+            }`}
           />
           <View className="mt-3 flex-row gap-3">
-            <Pressable
-              onPress={handleSaveToken}
-              className="flex-1 items-center rounded-2xl border border-white/10 bg-white/10 py-3">
-              <Text className="text-sm font-semibold text-white">Save token</Text>
-            </Pressable>
+            {isEditingToken ? (
+              <Pressable
+                onPress={() => {
+                  handleSaveToken();
+                  setIsEditingToken(false);
+                }}
+                className="flex-1 items-center rounded-2xl border border-white/10 bg-white/10 py-3">
+                <Text className="text-sm font-semibold text-white">Save token</Text>
+              </Pressable>
+            ) : (
+              <View className="flex-1 justify-center rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3">
+                <Text className="text-sm text-white/35">Tap edit to change the token.</Text>
+              </View>
+            )}
             <Pressable
               onPress={() => setShowSearch(true)}
               className="flex-1 items-center rounded-2xl border border-emerald-500/40 bg-emerald-500/10 py-3">

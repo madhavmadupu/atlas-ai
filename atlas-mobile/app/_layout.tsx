@@ -15,8 +15,8 @@ export default function RootLayout() {
         }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="connect" options={{ title: 'Connect to Desktop' }} />
-        <Stack.Screen name="chat/index" options={{ title: 'Atlas AI' }} />
-        <Stack.Screen name="chat/[id]" options={{ title: 'Chat', headerBackTitle: 'Chats' }} />
+        <Stack.Screen name="chat/index" options={{ headerShown: false }} />
+        <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="share" options={{ title: 'Share to Atlas AI' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         <Stack.Screen name="models" options={{ title: 'Manage Models' }} />

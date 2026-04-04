@@ -9,6 +9,7 @@ interface ConnectionState {
   desktopPort: number;
   isConnected: boolean;
   defaultModel: string | null;
+  desktopModels: string[];
   inferenceProvider: InferenceProvider;
   localModelPath: string | null;
   localModelName: string | null;
@@ -21,11 +22,28 @@ interface ConnectionActions {
   checkConnection: () => Promise<boolean>;
   disconnect: () => void;
   setEndpoint: (ip: string, port: number) => void;
+  refreshDesktopModels: () => Promise<string[]>;
+  setDefaultModel: (model: string | null) => void;
   setInferenceProvider: (provider: InferenceProvider) => void;
   setLocalModel: (model: { path: string; name?: string | null } | null) => void;
   setHuggingFaceToken: (token: string | null) => void;
   updateLocalSettings: (settings: Partial<LocalInferenceSettings>) => void;
   applyLocalTier: (tier: LocalInferenceSettings['performanceTier']) => void;
+}
+
+async function fetchDesktopModels(baseUrl: string): Promise<string[]> {
+  try {
+    const modelsRes = await fetch(`${baseUrl}/api/models`);
+    if (!modelsRes.ok) return [];
+    const models = await modelsRes.json();
+    return Array.isArray(models)
+      ? models
+          .map((model) => (typeof model?.name === 'string' ? model.name : null))
+          .filter((name): name is string => Boolean(name))
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
@@ -35,6 +53,7 @@ export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
       desktopPort: 3001,
       isConnected: false,
       defaultModel: null,
+      desktopModels: [],
       inferenceProvider: 'local',
       localModelPath: null,
       localModelName: null,
@@ -49,22 +68,18 @@ export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
           const health = await healthRes.json();
           if (!health.status) return false;
 
-          let firstModel: string | null = null;
-          try {
-            const modelsRes = await fetch(`${baseUrl}/api/models`);
-            if (modelsRes.ok) {
-              const models = await modelsRes.json();
-              firstModel = models[0]?.name ?? null;
-            }
-          } catch {
-            // Models fetch is optional
-          }
+          const models = await fetchDesktopModels(baseUrl);
+          const currentModel = get().defaultModel;
+          const firstModel = models[0] ?? null;
+          const nextDefaultModel =
+            currentModel && models.includes(currentModel) ? currentModel : firstModel;
 
           set({
             desktopIP: ip,
             desktopPort: port,
             isConnected: true,
-            defaultModel: firstModel,
+            defaultModel: nextDefaultModel,
+            desktopModels: models,
           });
           return true;
         } catch {
@@ -79,6 +94,9 @@ export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
           const res = await fetch(`http://${desktopIP}:${desktopPort}/api/health`);
           const ok = res.ok;
           set({ isConnected: ok });
+          if (ok) {
+            void get().refreshDesktopModels();
+          }
           return ok;
         } catch {
           set({ isConnected: false });
@@ -87,11 +105,33 @@ export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
       },
 
       disconnect: () => {
-        set({ desktopIP: null, isConnected: false, defaultModel: null });
+        set({ desktopIP: null, isConnected: false, defaultModel: null, desktopModels: [] });
       },
 
       setEndpoint: (ip, port) => {
         set({ desktopIP: ip, desktopPort: port, isConnected: false });
+      },
+
+      refreshDesktopModels: async () => {
+        const { desktopIP, desktopPort, defaultModel } = get();
+        if (!desktopIP) {
+          set({ desktopModels: [], defaultModel: null });
+          return [];
+        }
+
+        const models = await fetchDesktopModels(`http://${desktopIP}:${desktopPort}`);
+        set({
+          desktopModels: models,
+          defaultModel:
+            defaultModel && models.includes(defaultModel)
+              ? defaultModel
+              : (models[0] ?? defaultModel ?? null),
+        });
+        return models;
+      },
+
+      setDefaultModel: (model) => {
+        set({ defaultModel: model });
       },
 
       setInferenceProvider: (provider) => {
@@ -127,6 +167,8 @@ export const useConnectionStore = create<ConnectionState & ConnectionActions>()(
       partialize: (state) => ({
         desktopIP: state.desktopIP,
         desktopPort: state.desktopPort,
+        defaultModel: state.defaultModel,
+        desktopModels: state.desktopModels,
         inferenceProvider: state.inferenceProvider,
         localModelPath: state.localModelPath,
         localModelName: state.localModelName,
