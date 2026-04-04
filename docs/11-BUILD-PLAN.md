@@ -1,38 +1,110 @@
-# Atlas AI — Current Build Status
+# Atlas AI — Build Plan / Status
 
-## What is already implemented
+This doc is a module-by-module checklist of what exists today and what the next high-impact milestones are.
 
-### Mobile app
+## Desktop (`atlas-desktop/`)
 
-- Expo Router app in `atlas-mobile/`
-- Desktop provider mode over LAN
-- Local provider mode with `llama.rn`
-- Local GGUF import
-- Hugging Face model search/download
-- Device-tier recommendations for local models
-- Local conversation persistence with AsyncStorage
-- Local provider settings persistence
-- Validation that blocks unsupported GGUF types for chat
-- `expo-dev-client` setup for native mobile builds
+### Electron shell
 
-### Desktop integration
+Status: implemented baseline.
 
-- Desktop app remains the source of truth for desktop-backed conversations
-- Mobile desktop mode still talks to the Fastify API on port `3001`
+- Starts Ollama (or detects an existing Ollama) — `atlas-desktop/electron/sidecar.ts`
+- Starts Fastify and loads UI from `http://localhost:3001` — `atlas-desktop/electron/main.ts`
+- Exposes a minimal IPC bridge — `atlas-desktop/electron/preload.ts`
 
-## What changed compared with the original plan
+Next:
 
-The original plan assumed the mobile app would be only a LAN client. That is no longer true.
+- Add system tray controls (optional)
+- Improve error surfaces when Ollama is missing/offline
 
-The implemented mobile architecture is now:
+### Fastify API
 
-- `desktop` provider for desktop-hosted Ollama
-- `local` provider for on-device `llama.rn` inference
+Status: implemented baseline.
 
-## Recommended next milestones
+- Health, chat (SSE), conversations, models, settings — `atlas-desktop/server/routes/*`
 
-1. Add an explicit Expo Go guard in the mobile UI so local mode is disabled there.
-2. Add in-chat model switching for local provider mode.
-3. Improve Android and iOS release packaging for the offline mobile build.
-4. Add device capability heuristics to preselect the best model tier automatically.
-5. Add better import/download progress and error UX for large GGUF files.
+Next:
+
+- Add request validation schemas (so mobile errors are cleaner)
+- Add pagination for conversation lists if needed
+
+### SQLite persistence
+
+Status: implemented baseline.
+
+- Schema and query helpers in one file — `atlas-desktop/server/db.ts`
+
+Next:
+
+- Add lightweight migration/versioning once schema stabilizes
+
+### Desktop UI (Next.js)
+
+Status: implemented baseline.
+
+- App shell + chat window + sidebar + model selector — `atlas-desktop/atlas-web/components/*`
+
+Next:
+
+- Add message actions (copy/regenerate/edit) similar to mobile
+- Markdown/code rendering parity with mobile
+
+## Mobile (`atlas-mobile/`)
+
+### Provider split
+
+Status: implemented.
+
+- `desktop`: talks to Fastify over LAN
+- `local`: runs GGUF on-device via `llama.rn`
+
+Next:
+
+- Add a hard Expo Go guard: disable `local` provider and show a clear CTA to install the dev build
+
+### Chat UI shell
+
+Status: implemented (ChatGPT-style).
+
+- Top bar (safe-area aware) + sidebar + model picker + composer — `atlas-mobile/components/chat/*`
+
+Next:
+
+- Better markdown/code block rendering
+- Attachments entry points (optional)
+
+### Local GGUF model management
+
+Status: implemented baseline.
+
+- Import/download/delete/select model — `atlas-mobile/app/models.tsx`
+- Validation blocks non-chat GGUFs — `atlas-mobile/lib/model-validation.ts`
+
+Next:
+
+- Download resume + checksum (optional)
+- Storage/quota UX for large GGUFs
+
+### Local persistence
+
+Status: implemented baseline.
+
+- Local conversations/messages stored in AsyncStorage — `atlas-mobile/store/chat.store.ts`
+
+Next:
+
+- Consider SQLite if AsyncStorage becomes a bottleneck
+
+## Cross-cutting
+
+### Type drift
+
+Status: known.
+
+Types are duplicated between desktop and mobile (no shared package). See:
+
+- `docs/05-SHARED-TYPES.md`
+
+Next:
+
+- Extract a small shared API contract module (optional)

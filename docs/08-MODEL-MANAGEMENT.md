@@ -1,74 +1,116 @@
 # Atlas AI — Model Management
 
-## Overview
+Atlas AI has two separate model-management stories:
 
-Atlas AI now has two model-management stories:
+1. Desktop models (Ollama)
+2. Mobile on-device models (GGUF)
 
-1. Desktop model management
-   - Ollama models on the desktop
-   - managed through the desktop app / Fastify / Ollama
+They are intentionally separate because they run on different devices and use different runtimes.
 
-2. Mobile on-device model management
-   - GGUF files stored inside the mobile app sandbox
-   - managed through the mobile Models screen
-   - executed through `llama.rn`
+## Desktop (Ollama)
 
-This doc focuses on the mobile on-device path because that changed substantially.
+### What a “model” means on desktop
 
-## Mobile model manager
+On desktop, Atlas uses Ollama as the model runtime. Models are identified by their Ollama name (e.g. `qwen2.5:3b`).
 
-File: `atlas-mobile/app/models.tsx`
+### Where it’s implemented
 
-The mobile model manager supports:
+- Server endpoints:
+  - `atlas-desktop/server/routes/models.ts`
+  - `atlas-desktop/server/services/ollama.service.ts`
+- Desktop UI:
+  - `atlas-desktop/atlas-web/components/chat/ModelSelector.tsx`
+  - `atlas-desktop/atlas-web/store/models.store.ts`
 
-- selecting a device tier:
-  - `low`
-  - `medium`
-  - `high`
-- importing a GGUF from the device filesystem
-- searching Hugging Face for GGUF repos
-- downloading a recommended quantization for the selected device tier
-- selecting the active local model
-- deleting locally stored model files
+### API endpoints
 
-## Storage
+- `GET /api/models` — list installed Ollama models
+- `POST /api/models/pull` — pull a model with SSE progress
+- `DELETE /api/models/:name` — delete a model
 
-GGUFs are stored under the app document directory:
+## Mobile (GGUF, on-device)
 
+### What a “model” means on mobile local mode
+
+On mobile `local` provider, a model is a GGUF file stored inside the app’s sandbox. The app selects one GGUF as the “active local model” and uses it for offline chat.
+
+### Where it’s implemented
+
+- Model manager screen: `atlas-mobile/app/models.tsx`
+- Storage helpers: `atlas-mobile/lib/model-storage.ts`
+- Hugging Face search/download: `atlas-mobile/lib/huggingface.ts`
+- Validation: `atlas-mobile/lib/model-validation.ts`
+- Settings persistence: `atlas-mobile/store/connection.store.ts` (active model + inference settings)
+- Model list persistence: `atlas-mobile/store/model.store.ts`
+
+### Storage location
+
+GGUF files are stored under the app document directory in an app-managed folder:
+
+- folder name: `atlas-models/`
 - helper: `atlas-mobile/lib/model-storage.ts`
-- directory name: `atlas-models/`
 
-The store that tracks imported/downloaded models is:
+### Hugging Face access token
 
-- `atlas-mobile/store/model.store.ts`
+The model manager can download GGUFs from Hugging Face. For private or gated models, a token is required.
 
-## Recommendation logic
+The UI uses an “edit-to-unlock” pattern for the token field to avoid accidental edits:
 
-`atlas-mobile/lib/local-inference.ts` defines:
+- `atlas-mobile/app/models.tsx`
+- `atlas-mobile/app/settings.tsx`
 
-- tier presets for local generation settings
-- recommended model repos per device tier
-- preferred quantization order for GGUF file selection
+### Supported vs unsupported GGUFs (chat)
 
-Current tier recommendations are centered around chat-capable instruct models such as:
+Chat requires a generation model (chat/instruct). The app rejects:
 
-- `bartowski/Qwen2.5-1.5B-Instruct-GGUF`
-- `bartowski/Qwen2.5-3B-Instruct-GGUF`
-- `bartowski/Qwen2.5-7B-Instruct-GGUF`
+- embedding GGUFs
+- reranker GGUFs
+- `mmproj` projector files (multimodal accessories)
 
-## Validation
+This prevents selecting the wrong file class for chat (common mistake when browsing Hugging Face repos).
 
-`atlas-mobile/lib/model-validation.ts` rejects files that are not suitable for chat:
+### Device tiers
 
-- embedding models
-- reranker models
-- multimodal projector (`mmproj`) files
+Mobile local inference is configured by “device performance tier”:
 
-This prevents mistakes like selecting an embedding model as the active chat model.
+- `low`
+- `medium`
+- `high`
 
-## Runtime constraints
+The tier affects defaults like context size, max tokens, and GPU layers. See:
 
-- Downloading a model from Hugging Face obviously requires network access.
-- After the GGUF is on the phone, local inference is offline.
-- Expo Go cannot run the local model path because `llama.rn` is a native module.
-- A dev build or release build is required.
+- `atlas-mobile/lib/local-inference.ts`
+
+### Practical sizing guidance (mobile local)
+
+Local inference is constrained by:
+
+- RAM (model + context must fit)
+- storage (GGUF file sizes are large)
+- CPU/GPU throughput (tokens/sec varies widely)
+
+The tier system exists to pick conservative defaults for the device you’re testing on.
+
+## Practical workflow
+
+### Desktop provider on mobile
+
+If you pick provider `desktop` on mobile:
+
+- you pick an Ollama model (desktop-side)
+- the phone streams responses from the desktop API
+- no GGUF is needed on the phone
+
+### Local provider on mobile
+
+If you pick provider `local` on mobile:
+
+- you import/download a GGUF file once
+- after that, the phone can chat fully offline
+
+## Related docs
+
+- Mobile app: `docs/07-MOBILE-APP.md`
+- Settings: `docs/10-SETTINGS.md`
+- Build/runtime constraints: `docs/09-BUILD-DISTRIBUTION.md`
+- Troubleshooting: `docs/13-TROUBLESHOOTING.md`

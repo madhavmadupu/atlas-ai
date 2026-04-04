@@ -22,6 +22,7 @@ The mobile app now supports both:
    - `desktop`
    - `local`
 6. Do not allow embedding, reranker, or `mmproj` files to be used as chat models.
+7. Do not “patch” fixes inside `node_modules/` as the solution (changes must live in the repo).
 
 ## Current repo structure
 
@@ -75,3 +76,9 @@ When documenting or scripting Android builds for the mobile app, assume JDK 21.
 3. Keep desktop provider and local provider behavior separate.
 4. If a feature is local-only, document whether it requires a dev build or release build.
 5. Update the docs under `docs/` when the mobile provider model changes.
+
+## When adding desktop features
+
+1. Prefer Fastify HTTP endpoints for data operations (desktop UI + mobile can share them).
+2. Use Electron IPC only for OS-native concerns (window controls, system info).
+3. Keep SQLite access in the server layer (`atlas-desktop/server/db.ts`), not in the UI.

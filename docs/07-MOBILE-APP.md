@@ -1,142 +1,128 @@
-# Atlas AI — Mobile App
+# Atlas AI — Mobile App (Expo + React Native)
 
-## Overview
+The mobile app lives in `atlas-mobile/`. It is a ChatGPT-style chat UI with a provider split:
 
-The mobile app in `atlas-mobile/` now supports two inference providers:
+- `desktop`: connect to the desktop Fastify API over LAN (streams from desktop).
+- `local`: run a GGUF fully offline on-device via `llama.rn` (native `llama.cpp`).
 
-1. `desktop`
-   - connect to the desktop Fastify API over Wi-Fi
-   - use the desktop conversation history
-   - stream responses from the desktop
+## Expo Go vs dev build (important)
 
-2. `local`
-   - run a GGUF model directly on the phone with `llama.rn`
-   - store conversations locally in AsyncStorage
-   - store GGUF files in the app document directory
-   - work fully offline after the model is on the phone
+- Expo Go can run the UI and the `desktop` provider.
+- Expo Go cannot load `llama.rn`, so it can never run the `local` provider.
+- For local GGUF inference you need a dev build or release build.
 
-This means the app is no longer “mobile UI only”.
+## Directory map
 
-## Core files
+- Screens (Expo Router): `atlas-mobile/app/*`
+- UI components: `atlas-mobile/components/*`
+- Streaming hook: `atlas-mobile/hooks/useStreamingResponse.ts`
+- Utilities:
+  - `atlas-mobile/lib/api.ts` (desktop provider HTTP)
+  - `atlas-mobile/lib/local-llama-engine.ts` (local provider engine)
+  - `atlas-mobile/lib/model-storage.ts` (GGUF storage)
+  - `atlas-mobile/lib/model-validation.ts` (block unsupported GGUF types)
+- State (Zustand):
+  - `atlas-mobile/store/chat.store.ts`
+  - `atlas-mobile/store/connection.store.ts`
+  - `atlas-mobile/store/model.store.ts`
 
-### Entry and routing
+## UI shell (ChatGPT-style)
+
+The main entry redirects to the chat home:
 
 - `atlas-mobile/app/index.tsx`
-  - first screen
-  - shows the high-level choice between desktop mode and on-device mode
-- `atlas-mobile/app/_layout.tsx`
-  - Expo Router stack
-  - includes `connect`, `chat`, `models`, `settings`, and `share`
 
-### Desktop connection flow
+The chat experience is split into:
 
-- `atlas-mobile/app/connect.tsx`
-  - manual desktop IP / port entry
-- `atlas-mobile/lib/api.ts`
-  - builds Fastify endpoint URLs from the saved desktop host/port
+- `atlas-mobile/app/chat/index.tsx` — “home” screen: suggestions, recent chats, composer
+- `atlas-mobile/app/chat/[id].tsx` — conversation screen: message list + composer
+
+Shell components:
+
+- `atlas-mobile/components/chat/ChatShellHeader.tsx` — top bar (safe-area aware)
+- `atlas-mobile/components/chat/ChatSidebar.tsx` — conversation history sidebar
+- `atlas-mobile/components/chat/ModelPicker.tsx` — provider-aware model dropdown
+- `atlas-mobile/components/chat/MessageBubble.tsx` — bubbles + actions
+- `atlas-mobile/components/chat/MessageInput.tsx` — composer + edit-resend UX
+
+## Provider behavior
+
+### Provider: `desktop`
+
+- Requires the desktop app’s Fastify server reachable over LAN (`:3001`).
+- Conversations and messages are loaded from the desktop API.
+- Best for using bigger desktop-hosted models via Ollama.
+
+Mobile uses:
+
+- `atlas-mobile/lib/api.ts` to build URLs
+- `atlas-mobile/hooks/useStreamingResponse.ts` to stream SSE from `POST /api/chat`
+
+### Provider: `local`
+
+- Requires an installed app binary that includes `llama.rn`.
+- Requires a chat/instruct GGUF selected as the active local model.
+- Conversations and messages are stored locally in AsyncStorage.
+
+Mobile uses:
+
+- `atlas-mobile/lib/local-llama-engine.ts` for context init + token streaming
+- `atlas-mobile/lib/local-inference.ts` for presets and device tiers
+
+## Provider selection & settings
+
+- Provider selection and connection settings: `atlas-mobile/app/settings.tsx`
+- Desktop connection helper screen: `atlas-mobile/app/connect.tsx`
+- Model manager: `atlas-mobile/app/models.tsx`
+
+Settings are persisted in:
+
 - `atlas-mobile/store/connection.store.ts`
-  - persists desktop IP, desktop port, provider selection, active local model, Hugging Face token, and local inference settings
 
-### Chat flow
+## Provider gating (prevent “half configured” chats)
+
+The chat home screen enforces:
+
+- `local` provider requires an active local GGUF selected
+- `desktop` provider requires a saved, reachable desktop endpoint
+
+This is implemented as a “mode readiness” check before starting a new chat:
 
 - `atlas-mobile/app/chat/index.tsx`
-  - conversation list
+
+## Message actions (ChatGPT-style)
+
+Message bubbles support common chat actions:
+
+- user messages: copy, edit & resend
+- assistant messages: copy, regenerate, share
+
+Implementation:
+
+- `atlas-mobile/components/chat/MessageBubble.tsx`
 - `atlas-mobile/app/chat/[id].tsx`
-  - message view
-- `atlas-mobile/hooks/useStreamingResponse.ts`
-  - routes the request to either desktop Fastify or local `llama.rn`
-- `atlas-mobile/store/chat.store.ts`
-  - desktop mode: loads/saves via the Fastify API
-  - local mode: loads/saves via AsyncStorage-backed mobile storage
 
-### On-device model management
-
-- `atlas-mobile/app/models.tsx`
-  - import GGUF from local files
-  - search/download GGUF models from Hugging Face
-  - select active local model
-  - choose device tier recommendations (`low`, `medium`, `high`)
-- `atlas-mobile/store/model.store.ts`
-  - persists the list of stored local model files
-- `atlas-mobile/lib/model-storage.ts`
-  - creates the app-local model folder
-- `atlas-mobile/lib/huggingface.ts`
-  - searches model repos and fetches file lists
-- `atlas-mobile/lib/model-validation.ts`
-  - rejects embedding, reranker, and `mmproj` files for chat
-
-### On-device inference
-
-- `atlas-mobile/lib/local-inference.ts`
-  - default local generation settings
-  - device-tier presets
-  - recommended model repos and quantization preferences
-- `atlas-mobile/lib/local-llama-engine.ts`
-  - initializes `llama.rn`
-  - configures context size, GPU layers, batch size
-  - clears cache between conversations
-  - surfaces a clear error if the installed app build does not include the native `llama.rn` module
-
-## Current behavior
+## Persistence model
 
 ### Desktop provider
 
-- Requires desktop app + Fastify API running
-- Requires both devices on the same LAN
-- Uses the desktop conversation list and message history
-- Best for using larger desktop-hosted models through Ollama
+- conversations/messages live on desktop (SQLite)
+- mobile loads via `/api/conversations` and `/api/conversations/:id`
 
 ### Local provider
 
-- Requires a development build or release build
-- Does not work in Expo Go
-- Requires a chat/instruct GGUF
-- Persists local chats on the phone
-- Uses local generation settings:
-  - system prompt
-  - temperature
-  - top-p
-  - max response tokens
-  - context size
-  - GPU layer count
+- conversations/messages live on phone (AsyncStorage)
+- GGUF files live on phone (Expo FileSystem)
 
-## Supported and unsupported GGUFs
+Implementation:
 
-### Supported
+- `atlas-mobile/store/chat.store.ts` (provider-aware chat source)
+- `atlas-mobile/lib/local-chat-storage.ts` (AsyncStorage helpers)
+- `atlas-mobile/lib/model-storage.ts` (file storage helpers)
 
-- chat models
-- instruct models
+## Related docs
 
-Examples:
-
-- `Qwen2.5-1.5B-Instruct`
-- `Qwen2.5-3B-Instruct`
-- `Llama-3.2-1B-Instruct`
-
-### Unsupported for chat
-
-- embedding models
-- reranker models
-- `mmproj` projector files
-
-The app now blocks these model classes before they are used for local chat.
-
-## Build requirements for local inference
-
-`llama.rn` is a native module, so local mode needs:
-
-- `expo-dev-client`
-- `expo prebuild`
-- a custom installed app binary
-- JDK 21 for Android builds
-
-Typical Android dev flow:
-
-```bash
-cd atlas-mobile
-npx expo prebuild --clean
-npx expo run:android
-npx expo start --dev-client
-```
-
-Then open the installed `Atlas AI` app, not Expo Go.
+- Models: `docs/08-MODEL-MANAGEMENT.md`
+- Settings: `docs/10-SETTINGS.md`
+- Build & packaging: `docs/09-BUILD-DISTRIBUTION.md`
+- Troubleshooting: `docs/13-TROUBLESHOOTING.md`

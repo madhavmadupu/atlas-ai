@@ -1,36 +1,40 @@
 # Atlas AI — Build & Distribution
 
-## Current reality
+This repo has two apps with different build pipelines:
 
-This repo has two separate apps:
+- `atlas-desktop/` (Electron)
+- `atlas-mobile/` (Expo + React Native)
 
-- `atlas-desktop/`
-- `atlas-mobile/`
+This doc focuses on mobile because local GGUF inference requires native builds.
 
-This document focuses on what is needed to run and package the mobile app now that it has an on-device `llama.rn` mode.
+## Mobile dev modes
 
-## Mobile development modes
+### Expo Go (fast iteration)
 
-### Expo Go
+Use Expo Go for:
 
-Use Expo Go only for:
+- navigation/layout/styling
+- the mobile `desktop` provider (LAN)
 
-- navigation work
-- UI work
-- desktop-provider mode over LAN
+Do not use Expo Go for:
 
-Do **not** use Expo Go for local GGUF inference.
+- mobile `local` provider (GGUF) — requires `llama.rn` (native module)
 
-Reason:
+Command:
 
-- `llama.rn` is a native module
-- Expo Go does not include it
+```bash
+cd atlas-mobile
+npx expo start --clear
+```
 
-### Development build
+### Development build (required for local GGUF)
 
-Use a custom dev build for on-device inference work.
+Use a dev build when you need:
 
-Android flow:
+- `llama.rn` on-device inference
+- anything that touches native modules/plugins
+
+Android:
 
 ```bash
 cd atlas-mobile
@@ -39,62 +43,69 @@ npx expo run:android
 npx expo start --dev-client
 ```
 
-Then open the installed `Atlas AI` app on the device/emulator.
+### Release build (standalone, no dev server)
 
-## Android requirements
+Release builds should run without Metro/dev server.
 
-- Android SDK
-- emulator or physical device
-- `expo-dev-client`
-- JDK 21
+If an installed APK prompts you to “connect to development server”, you installed a debug/dev build (or you’re launching via dev-client). Build and install `assembleRelease` instead.
 
-Important:
-
-- JDK 25/26 caused Gradle failures in this project
-- use JDK 21 for Android builds
-- if needed, pin Gradle with:
-
-```properties
-org.gradle.java.home=C:\\Program Files\\Java\\jdk-21
-```
-
-in `atlas-mobile/android/gradle.properties`
-
-## Release packaging
-
-### Android release APK
+Android APK:
 
 ```bash
 cd atlas-mobile/android
-./gradlew assembleRelease
+./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 ```
 
-Expected output:
+Output:
 
 - `atlas-mobile/android/app/build/outputs/apk/release/app-release.apk`
 
-Install with:
+Install:
 
 ```bash
-adb install app/build/outputs/apk/release/app-release.apk
+adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
-### iOS
+Android App Bundle (Play Store):
 
-For iOS distribution, use the generated native iOS project after prebuild or EAS Build.
+```bash
+cd atlas-mobile/android
+./gradlew bundleRelease -PreactNativeArchitectures=arm64-v8a
+```
 
-## Mobile app config that matters
+Output:
 
-File: `atlas-mobile/app.json`
+- `atlas-mobile/android/app/build/outputs/bundle/release/app-release.aab`
 
-Current important values:
+### Windows note
 
-- scheme: `atlas`
-- iOS bundle id: `com.atlasai.app`
-- Android package: `com.atlasai.app`
-- `llama.rn` Expo plugin enabled
-- `enableOpenCLAndHexagon: true`
+On Windows, use `gradlew.bat`:
 
-## Desktop distribution note
+```powershell
+cd atlas-mobile\\android
+.\gradlew.bat assembleRelease -PreactNativeArchitectures=arm64-v8a
+```
 
-Desktop packaging remains separate. The mobile app does not depend on desktop packaging when used in local on-device mode.
+## Android requirements
+
+- Android SDK / emulator or phone
+- JDK 21 (this repo has repeatedly failed with JDK 25/26)
+
+## iOS note
+
+Local on-device inference on iOS also requires a native build (not Expo Go). Use EAS or the generated iOS project after `expo prebuild`.
+
+## Desktop build notes
+
+Desktop packaging is separate from mobile.
+
+At runtime, the desktop app is responsible for:
+
+- running Fastify on `:3001`
+- making it LAN reachable (`0.0.0.0`)
+- running/connecting to Ollama (`:11434`)
+
+See:
+
+- `docs/02-ELECTRON-DESKTOP.md`
+- `docs/03-FASTIFY-API-SERVER.md`
