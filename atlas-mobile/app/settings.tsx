@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -141,10 +139,7 @@ export default function SettingsScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
-        className="flex-1 bg-[#0a0a0a]">
+      <View className="flex-1 bg-[#0a0a0a]">
         <View
           className="border-b border-white/10 bg-slate-950 px-4 pb-4"
           style={{ paddingTop: Math.max(insets.top, 0) + 4 }}>
@@ -167,7 +162,10 @@ export default function SettingsScreen() {
 
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ padding: 20, paddingBottom: 36 }}>
+          contentContainerStyle={{ padding: 20, paddingBottom: 36 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          automaticallyAdjustKeyboardInsets>
           <View className="mb-5 rounded-3xl border border-white/10 bg-white/5 p-4">
             <View className="flex-row items-center justify-between">
               <Text className="text-lg font-semibold text-white">Inference provider</Text>
@@ -461,7 +459,7 @@ export default function SettingsScreen() {
             </>
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </>
   );
 }
