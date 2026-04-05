@@ -19,11 +19,11 @@ interface Props {
 export function MessageBubble({ message, isStreaming, onCopy, onEdit, onRetry, onShare }: Props) {
   const isUser = message.role === 'user';
   const bubbleClass = isUser
-    ? 'rounded-tr-sm bg-indigo-600'
-    : 'rounded-tl-sm border border-white/8 bg-white/[0.04]';
+    ? 'rounded-[24px] rounded-tr-sm bg-indigo-600'
+    : 'rounded-[24px] rounded-tl-sm border border-white/5 bg-slate-800/80';
 
   return (
-    <View className={`mb-5 flex-row ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <View className={`mb-6 flex-row ${isUser ? 'justify-end' : 'justify-start'}`}>
       <View className={`max-w-[88%] ${isUser ? 'items-end' : 'items-start'}`}>
         {!isUser ? (
           <View className="mb-2 flex-row items-center gap-2">
@@ -37,7 +37,7 @@ export function MessageBubble({ message, isStreaming, onCopy, onEdit, onRetry, o
         ) : null}
 
         <Pressable>
-          <View className={`rounded-3xl px-4 py-3 ${bubbleClass}`}>
+          <View className={`px-5 py-4 ${bubbleClass}`}>
             <Text
               selectable
               className={`text-sm leading-6 ${isUser ? 'text-white' : 'text-white/90'}`}>

@@ -243,7 +243,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
-        className="flex-1 bg-[#0a0a0a]">
+        className="flex-1 bg-slate-950">
         <ChatShellHeader
           title={conversation?.title ?? 'New chat'}
           subtitle={providerSubtitle}

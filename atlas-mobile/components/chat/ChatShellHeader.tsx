@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ChatShellHeaderProps {
@@ -23,7 +23,7 @@ export function ChatShellHeader({
 
   return (
     <View
-      className="border-white/8 border-b bg-[#0b0b0f] px-4 pb-4"
+      className="border-white/10 border-b bg-slate-950 px-4 pb-4"
       style={{ paddingTop: Math.max(insets.top, 8) + 8 }}>
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2">
@@ -54,6 +54,12 @@ export function ChatShellHeader({
             className="h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
             <Ionicons name="settings-outline" size={18} color="#ffffff" />
           </Pressable>
+          <View className="h-10 w-10 overflow-hidden rounded-2xl border border-white/10">
+            <Image
+              source={{ uri: 'https://i.pravatar.cc/100?img=33' }}
+              className="h-full w-full"
+            />
+          </View>
         </View>
       </View>
     </View>
