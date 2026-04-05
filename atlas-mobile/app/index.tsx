@@ -1,31 +1,43 @@
 import { useEffect } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { View, ActivityIndicator, Text } from 'react-native';
 import { useConnectionStore } from '@/store/connection.store';
 
 export default function Index() {
   const router = useRouter();
-  const { desktopIP, connectToDesktop, desktopPort } = useConnectionStore();
+  const { connectToDesktop, desktopIP, desktopPort, inferenceProvider } = useConnectionStore();
 
   useEffect(() => {
-    const init = async () => {
-      // Always try to connect with the default/saved IP on launch
-      if (desktopIP) {
-        const ok = await connectToDesktop(desktopIP, desktopPort);
-        if (ok) {
-          router.replace('/(tabs)');
-          return;
-        }
+    let cancelled = false;
+
+    async function init() {
+      if (inferenceProvider === 'local') {
+        if (!cancelled) router.replace('/chat');
+        return;
       }
-      router.replace('/connect');
+
+      if (!desktopIP) {
+        if (!cancelled) router.replace('/connect');
+        return;
+      }
+
+      const ok = await connectToDesktop(desktopIP, desktopPort);
+      if (cancelled) return;
+      router.replace(ok ? '/chat' : '/connect');
+    }
+
+    void init();
+    return () => {
+      cancelled = true;
     };
-    init();
-  }, []);
+  }, [connectToDesktop, desktopIP, desktopPort, inferenceProvider, router]);
 
   return (
     <View className="flex-1 items-center justify-center bg-[#0a0a0a]">
       <ActivityIndicator size="large" color="#6366f1" />
-      <Text className="mt-4 text-sm text-white/40">Connecting to desktop...</Text>
+      <Text className="mt-4 text-sm text-white/40">
+        {inferenceProvider === 'local' ? 'Opening offline chat…' : 'Connecting to desktop…'}
+      </Text>
     </View>
   );
 }

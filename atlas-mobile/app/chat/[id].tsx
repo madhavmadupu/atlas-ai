@@ -1,51 +1,74 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
-  Alert,
-  Modal,
   Share,
   StyleSheet,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
+  Text,
+  View,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { BlurView } from 'expo-blur';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import Animated, { FadeIn, FadeOut, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { useChatStore } from '@/store/chat.store';
-import { useConnectionStore } from '@/store/connection.store';
-import { useStreamingResponse } from '@/hooks/useStreamingResponse';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import Animated, {
+  FadeIn,
+  FadeOut,
+} from 'react-native-reanimated';
+import { ChatShellHeader } from '@/components/chat/ChatShellHeader';
+import { ChatSidebar } from '@/components/chat/ChatSidebar';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { MessageInput } from '@/components/chat/MessageInput';
+import { ModelPicker } from '@/components/chat/ModelPicker';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
+import { useStreamingResponse } from '@/hooks/useStreamingResponse';
 import { getPersona } from '@/lib/personas';
 import type { Message } from '@/lib/types';
+import { useChatStore } from '@/store/chat.store';
+import { useConnectionStore } from '@/store/connection.store';
+import { useModelStore } from '@/store/model.store';
 
-// ─── Date Separator ─────────────────────────────────────────────────────────
+function getRetryPrompt(messages: Message[], message: Message): string | null {
+  if (message.role === 'user') return message.content;
+
+  const currentIndex = messages.findIndex((item) => item.id === message.id);
+  if (currentIndex < 0) return null;
+
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') {
+      return messages[index].content;
+    }
+  }
+
+  return null;
+}
 
 function formatDateLabel(iso: string): string {
-  const d = new Date(iso);
+  const date = new Date(iso);
   const now = new Date();
-  const diff = now.getTime() - d.getTime();
+  const diff = now.getTime() - date.getTime();
   const dayMs = 86400000;
 
-  if (diff < dayMs && d.getDate() === now.getDate()) return 'Today';
+  if (diff < dayMs && date.getDate() === now.getDate()) return 'Today';
   if (diff < 2 * dayMs) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
 }
 
 function shouldShowDateSeparator(messages: Message[], index: number): boolean {
   if (index === 0) return true;
-  const prev = new Date(messages[index - 1].created_at);
-  const curr = new Date(messages[index].created_at);
-  return prev.toDateString() !== curr.toDateString();
+  const previous = new Date(messages[index - 1].created_at);
+  const current = new Date(messages[index].created_at);
+  return previous.toDateString() !== current.toDateString();
 }
-
-// ─── More Menu ──────────────────────────────────────────────────────────────
 
 function MoreMenu({
   visible,
@@ -73,7 +96,15 @@ function MoreMenu({
                 <View style={menu.divider} />
                 <MenuItem icon="↗" label="Export Chat" onPress={() => { onExport(); onClose(); }} />
                 <View style={menu.divider} />
-                <MenuItem icon="✕" label="Delete Chat" onPress={() => { onDelete(); onClose(); }} destructive />
+                <MenuItem
+                  icon="✕"
+                  label="Delete Chat"
+                  onPress={() => {
+                    onDelete();
+                    onClose();
+                  }}
+                  destructive
+                />
               </View>
             </BlurView>
           </View>
@@ -83,7 +114,15 @@ function MoreMenu({
             <View style={menu.divider} />
             <MenuItem icon="↗" label="Export Chat" onPress={() => { onExport(); onClose(); }} />
             <View style={menu.divider} />
-            <MenuItem icon="✕" label="Delete Chat" onPress={() => { onDelete(); onClose(); }} destructive />
+            <MenuItem
+              icon="✕"
+              label="Delete Chat"
+              onPress={() => {
+                onDelete();
+                onClose();
+              }}
+              destructive
+            />
           </View>
         )}
       </Pressable>
@@ -103,10 +142,7 @@ function MenuItem({
   destructive?: boolean;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [menu.item, pressed && menu.itemPressed]}
-    >
+    <Pressable onPress={onPress} style={({ pressed }) => [menu.item, pressed && menu.itemPressed]}>
       <Text style={[menu.icon, destructive && menu.destructiveText]}>{icon}</Text>
       <Text style={[menu.label, destructive && menu.destructiveText]}>{label}</Text>
     </Pressable>
@@ -175,110 +211,103 @@ const menu = StyleSheet.create({
   },
 });
 
-// ─── Main Screen ────────────────────────────────────────────────────────────
-
 export default function ChatScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, prefill, autostart } = useLocalSearchParams<{
+    id: string;
+    prefill?: string;
+    autostart?: string;
+  }>();
   const router = useRouter();
-  const navigation = useNavigation();
-  const {
-    messages,
-    isStreaming,
-    streamingContent,
-    error,
-    setActiveConversation,
-    loadMessages,
-    deleteConversation,
-    conversations,
-  } = useChatStore();
-  const defaultModel = useConnectionStore((s) => s.defaultModel);
-  const { sendMessage, stopGeneration } = useStreamingResponse(id ?? null);
   const flatListRef = useRef<FlatList<Message>>(null);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [showScrollDown, setShowScrollDown] = useState(false);
+  const hasAutoStartedRef = useRef(false);
 
-  // Get conversation details and persona
-  const conversation = conversations.find((c) => c.id === id);
-  const modelName = conversation?.model ?? defaultModel ?? undefined;
-  const persona = getPersona(conversation?.persona_id);
+  const {
+    conversations,
+    createConversation,
+    deleteConversation,
+    error,
+    isStreaming,
+    loadConversations,
+    messages,
+    setActiveConversation,
+    streamingContent,
+  } = useChatStore();
+  const { sendMessage, stopGeneration } = useStreamingResponse(id ?? null);
+  const {
+    defaultModel,
+    desktopModels,
+    inferenceProvider,
+    isConnected,
+    localModelName,
+    localModelPath,
+    refreshDesktopModels,
+    setDefaultModel,
+    setInferenceProvider,
+    setLocalModel,
+  } = useConnectionStore();
+  const { loadModels, models } = useModelStore();
+
+  const [composerText, setComposerText] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   useEffect(() => {
     if (id) setActiveConversation(id);
   }, [id, setActiveConversation]);
 
-  // Set header with persona name + model subtitle
   useEffect(() => {
-    navigation.setOptions({
-      headerTitle: () => (
-        <View style={{ alignItems: 'center' }}>
-          <Text style={{ fontSize: 17, fontWeight: '600', color: '#ffffff' }}>
-            {persona.icon} {persona.name}
-          </Text>
-          {modelName && (
-            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>
-              {modelName}
-            </Text>
-          )}
-        </View>
-      ),
-      headerRight: () => (
-        <Pressable
-          onPress={() => setMenuVisible(true)}
-          style={{ paddingHorizontal: 8, paddingVertical: 4 }}
-          hitSlop={8}
-        >
-          <Text style={{ fontSize: 20, color: 'rgba(255,255,255,0.6)', letterSpacing: 2 }}>
-            ···
-          </Text>
-        </Pressable>
-      ),
-    });
-  }, [navigation, modelName, persona]);
+    if (typeof prefill === 'string' && prefill.trim() && autostart !== '1') {
+      setComposerText((current) => (current.trim().length > 0 ? current : prefill));
+    }
+  }, [autostart, prefill]);
 
-  const handleRefresh = useCallback(() => {
-    if (id) loadMessages(id);
-  }, [id, loadMessages]);
-
-  const handleDelete = useCallback(() => {
-    Alert.alert('Delete Chat', 'Delete this conversation permanently?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          if (id) {
-            await deleteConversation(id);
-            router.back();
-          }
-        },
-      },
-    ]);
-  }, [id, deleteConversation, router]);
-
-  const handleExport = useCallback(async () => {
-    if (messages.length === 0) {
-      Alert.alert('Nothing to export', 'This conversation has no messages.');
+  useEffect(() => {
+    if (!id || autostart !== '1' || hasAutoStartedRef.current || typeof prefill !== 'string') {
       return;
     }
 
-    const text = messages
-      .map((m) => {
-        const role = m.role === 'user' ? 'You' : 'Atlas AI';
-        return `${role}:\n${m.content}`;
-      })
-      .join('\n\n---\n\n');
+    const prompt = prefill.trim();
+    if (!prompt) return;
 
-    try {
-      await Share.share({
-        message: text,
-        title: 'Atlas AI Chat Export',
-      });
-    } catch {
-      // User cancelled
-    }
-  }, [messages]);
+    hasAutoStartedRef.current = true;
+    setComposerText('');
+    void sendMessage(prompt);
+  }, [autostart, id, prefill, sendMessage]);
 
-  const displayMessages: Message[] = useMemo(() => [
+  useFocusEffect(
+    useCallback(() => {
+      void loadConversations();
+      void loadModels();
+      if (inferenceProvider === 'desktop' && isConnected) {
+        void refreshDesktopModels();
+      }
+    }, [inferenceProvider, isConnected, loadConversations, loadModels, refreshDesktopModels])
+  );
+
+  const conversation = useMemo(
+    () => conversations.find((item) => item.id === id) ?? null,
+    [conversations, id]
+  );
+  const persona = getPersona(conversation?.persona_id);
+
+  const modelLabel =
+    inferenceProvider === 'local'
+      ? (localModelName ?? 'Choose model')
+      : (defaultModel ?? 'Desktop model');
+
+  const providerSubtitle =
+    inferenceProvider === 'local'
+      ? 'Offline on-device chat'
+      : isConnected
+        ? 'Desktop connected'
+        : 'Desktop not connected';
+  const headerSubtitle =
+    persona.id !== 'general' ? `${providerSubtitle} · ${persona.name}` : providerSubtitle;
+
+  const displayMessages: Message[] = [
     ...messages,
     ...(isStreaming && streamingContent
       ? [
@@ -291,12 +320,158 @@ export default function ChatScreen() {
           },
         ]
       : []),
-  ], [messages, isStreaming, streamingContent, id]);
+  ];
 
-  const isEmpty = displayMessages.length === 0 && !isStreaming;
+  const ensureModeReady = useCallback(() => {
+    if (inferenceProvider === 'local' && !localModelPath) {
+      Alert.alert(
+        'Select a model first',
+        'Import or download a GGUF before starting offline chat.'
+      );
+      router.push('/models');
+      return false;
+    }
 
-  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    if (inferenceProvider === 'desktop' && !isConnected) {
+      Alert.alert(
+        'Connect desktop first',
+        'Configure the desktop endpoint before using desktop mode.'
+      );
+      router.push('/connect');
+      return false;
+    }
+
+    return true;
+  }, [inferenceProvider, isConnected, localModelPath, router]);
+
+  const handleNewChat = useCallback(async () => {
+    if (!ensureModeReady()) return;
+
+    const model = inferenceProvider === 'local' ? modelLabel : (defaultModel ?? modelLabel);
+    const nextId = await createConversation(model);
+    setSidebarVisible(false);
+    router.replace({ pathname: '/chat/[id]', params: { id: nextId } });
+  }, [createConversation, defaultModel, ensureModeReady, inferenceProvider, modelLabel, router]);
+
+  const handleSelectConversation = useCallback(
+    (conversationId: string) => {
+      setSidebarVisible(false);
+      router.replace({ pathname: '/chat/[id]', params: { id: conversationId } });
+    },
+    [router]
+  );
+
+  const handleDeleteConversation = useCallback(
+    (targetConversation: { id: string; title: string }) => {
+      Alert.alert('Delete conversation', `Delete "${targetConversation.title}"?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteConversation(targetConversation.id);
+            if (targetConversation.id === id) {
+              router.replace('/chat');
+            }
+          },
+        },
+      ]);
+    },
+    [deleteConversation, id, router]
+  );
+
+  const handleCopySpecificMessage = useCallback(async (message: Message) => {
+    await Clipboard.setStringAsync(message.content);
+  }, []);
+
+  const handleEditMessage = useCallback((message: Message) => {
+    setComposerText(message.content);
+    setEditingMessageId(message.id);
+    flatListRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
+  const handleRetryMessage = useCallback(
+    async (message: Message) => {
+      if (isStreaming) return;
+      const retryPrompt = getRetryPrompt(messages, message);
+      if (!retryPrompt) {
+        Alert.alert('Retry unavailable', 'No user prompt was found for this response.');
+        return;
+      }
+      setEditingMessageId(null);
+      setComposerText('');
+      await sendMessage(retryPrompt);
+    },
+    [isStreaming, messages, sendMessage]
+  );
+
+  const handleShareMessage = useCallback(async (message: Message) => {
+    await Share.share({ message: message.content });
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    if (id) {
+      setActiveConversation(id);
+    }
+  }, [id, setActiveConversation]);
+
+  const handleDelete = useCallback(() => {
+    if (!conversation) return;
+    Alert.alert('Delete Chat', 'Delete this conversation permanently?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteConversation(conversation.id);
+          router.replace('/chat');
+        },
+      },
+    ]);
+  }, [conversation, deleteConversation, router]);
+
+  const handleExport = useCallback(async () => {
+    if (messages.length === 0) {
+      Alert.alert('Nothing to export', 'This conversation has no messages.');
+      return;
+    }
+
+    const text = messages
+      .map((message) => {
+        const role = message.role === 'user' ? 'You' : 'Atlas AI';
+        return `${role}:\n${message.content}`;
+      })
+      .join('\n\n---\n\n');
+
+    try {
+      await Share.share({
+        message: text,
+        title: 'Atlas AI Chat Export',
+      });
+    } catch {
+      // noop
+    }
+  }, [messages]);
+
+  const handleSend = useCallback(
+    async (content: string) => {
+      if (!ensureModeReady()) return;
+      setEditingMessageId(null);
+      setComposerText('');
+      await sendMessage(content);
+    },
+    [ensureModeReady, sendMessage]
+  );
+
+  const openModelPicker = useCallback(() => {
+    if (inferenceProvider === 'desktop' && isConnected) {
+      void refreshDesktopModels();
+    }
+    setModelPickerVisible(true);
+  }, [inferenceProvider, isConnected, refreshDesktopModels]);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
     setShowScrollDown(distanceFromBottom > 150);
   }, []);
@@ -305,215 +480,203 @@ export default function ChatScreen() {
     flatListRef.current?.scrollToEnd({ animated: true });
   }, []);
 
-  const handleSuggestedPrompt = useCallback((text: string) => {
-    sendMessage(text);
-  }, [sendMessage]);
-
   return (
-    <KeyboardAvoidingView
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 56 : 80}
-      style={s.container}
-    >
-      <MoreMenu
-        visible={menuVisible}
-        onClose={() => setMenuVisible(false)}
-        onRefresh={handleRefresh}
-        onDelete={handleDelete}
-        onExport={handleExport}
-      />
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+        className="flex-1 bg-[#0a0a0a]">
+        <MoreMenu
+          visible={menuVisible}
+          onClose={() => setMenuVisible(false)}
+          onRefresh={handleRefresh}
+          onDelete={handleDelete}
+          onExport={handleExport}
+        />
 
-      {/* Messages */}
-      <FlatList
-        ref={flatListRef}
-        style={{ flex: 1 }}
-        data={displayMessages}
-        keyExtractor={(item) => item.id}
-        onScroll={handleScroll}
-        scrollEventThrottle={100}
-        contentContainerStyle={[
-          s.listContent,
-          isEmpty && s.listContentEmpty,
-        ]}
-        renderItem={({ item, index }) => (
-          <>
-            {shouldShowDateSeparator(displayMessages, index) && (
-              <View style={s.dateSeparator}>
-                <View style={s.dateLine} />
-                <Text style={s.dateText}>{formatDateLabel(item.created_at)}</Text>
-                <View style={s.dateLine} />
+        <ChatShellHeader
+          title={conversation?.title ?? 'New chat'}
+          subtitle={headerSubtitle}
+          modelLabel={modelLabel}
+          onOpenSidebar={() => setSidebarVisible(true)}
+          onOpenModelPicker={openModelPicker}
+          onOpenSettings={() => router.push('/settings')}
+          onOpenMoreMenu={() => setMenuVisible(true)}
+        />
+
+        <FlatList
+          ref={flatListRef}
+          data={displayMessages}
+          keyExtractor={(item) => item.id}
+          onScroll={handleScroll}
+          scrollEventThrottle={100}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 20,
+            paddingBottom: 16,
+            flexGrow: displayMessages.length === 0 ? 1 : undefined,
+            justifyContent: displayMessages.length === 0 ? 'center' : undefined,
+          }}
+          style={{ flex: 1 }}
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            <View className="items-center px-6">
+              <View
+                className="mb-4 h-16 w-16 items-center justify-center rounded-3xl border"
+                style={{
+                  backgroundColor: persona.accentBg,
+                  borderColor: `${persona.accentColor}33`,
+                }}>
+                <Text style={{ fontSize: 28 }}>{persona.icon}</Text>
               </View>
-            )}
-            <MessageBubble message={item} isStreaming={item.id === 'streaming'} />
-          </>
-        )}
-        ListEmptyComponent={
-          <View style={s.emptyContainer}>
-            {/* Persona icon */}
-            <View style={[s.emptyLogo, { backgroundColor: persona.accentBg, borderColor: persona.accentColor + '33' }]}>
-              <Text style={{ fontSize: 28 }}>{persona.icon}</Text>
-            </View>
-            <Text style={s.emptyTitle}>
-              {persona.id === 'general' ? 'How can I help you?' : persona.name}
-            </Text>
-            <Text style={s.emptySubtitle}>{persona.description}</Text>
-
-            {/* Persona-specific suggested prompts */}
-            <View style={s.promptsGrid}>
-              {persona.suggestedPrompts.map((p) => (
+              <Text className="text-3xl font-semibold text-white">
+                {persona.id === 'general' ? 'Start a new conversation' : persona.name}
+              </Text>
+              <Text className="mt-3 text-center text-sm leading-6 text-white/45">
+                {persona.description}
+              </Text>
+              <View className="mt-6 w-full gap-3">
+                {persona.suggestedPrompts.slice(0, 3).map((prompt) => (
                 <Pressable
-                  key={p.label}
-                  style={({ pressed }) => [
-                    s.promptChip,
-                    pressed && { backgroundColor: persona.accentColor + '1A', borderColor: persona.accentColor + '33' },
-                  ]}
-                  onPress={() => handleSuggestedPrompt(p.text)}
-                >
-                  <Text style={[s.promptLabel, { color: persona.accentColor }]}>{p.label}</Text>
-                  <Text style={s.promptText} numberOfLines={1}>{p.text}</Text>
+                  key={prompt.label}
+                  onPress={() => void handleSend(prompt.text)}
+                  className="rounded-3xl border px-4 py-4"
+                  style={{
+                    borderColor: `${persona.accentColor}22`,
+                    backgroundColor: `${persona.accentColor}11`,
+                  }}>
+                  <Text className="text-sm font-semibold" style={{ color: persona.accentColor }}>
+                    {prompt.label}
+                  </Text>
+                  <Text className="mt-2 text-sm leading-6 text-white/70">{prompt.text}</Text>
                 </Pressable>
-              ))}
+                ))}
+              </View>
             </View>
-          </View>
-        }
-        ListFooterComponent={isStreaming && !streamingContent ? <TypingIndicator /> : null}
-        onContentSizeChange={() => {
-          if (displayMessages.length > 0) {
-            flatListRef.current?.scrollToEnd({ animated: true });
           }
-        }}
-      />
+          ListFooterComponent={isStreaming && !streamingContent ? <TypingIndicator /> : null}
+          onContentSizeChange={() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }}
+          onLayout={() => {
+            flatListRef.current?.scrollToEnd({ animated: false });
+          }}
+          renderItem={({ item, index }) => (
+            <>
+              {shouldShowDateSeparator(displayMessages, index) ? (
+                <View className="mb-4 items-center">
+                  <View className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                    <Text className="text-[11px] font-medium uppercase tracking-[1.2px] text-white/35">
+                      {formatDateLabel(item.created_at)}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+              <MessageBubble
+                message={item}
+                isStreaming={item.id === 'streaming'}
+                onCopy={
+                  item.id === 'streaming' ? undefined : () => void handleCopySpecificMessage(item)
+                }
+                onEdit={
+                  item.id === 'streaming' || item.role !== 'user'
+                    ? undefined
+                    : () => handleEditMessage(item)
+                }
+                onRetry={item.id === 'streaming' ? undefined : () => void handleRetryMessage(item)}
+                onShare={
+                  item.id === 'streaming' || item.role === 'user'
+                    ? undefined
+                    : () => void handleShareMessage(item)
+                }
+              />
+            </>
+          )}
+        />
 
-      {/* Scroll to bottom FAB */}
-      {showScrollDown && !isEmpty && (
-        <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={s.scrollDownWrap}>
-          <Pressable onPress={scrollToBottom} style={s.scrollDownBtn}>
-            <Text style={s.scrollDownArrow}>↓</Text>
-          </Pressable>
-        </Animated.View>
-      )}
+        {showScrollDown && displayMessages.length > 0 ? (
+          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={styles.scrollDownWrap}>
+            <Pressable onPress={scrollToBottom} style={styles.scrollDownBtn}>
+              <Text style={styles.scrollDownArrow}>↓</Text>
+            </Pressable>
+          </Animated.View>
+        ) : null}
 
-      {/* Error */}
-      {error && (
-        <View style={s.errorBar}>
-          <Text style={s.errorIcon}>!</Text>
-          <Text style={s.errorText}>{error}</Text>
-          <Pressable onPress={() => useChatStore.getState().setError(null)}>
-            <Text style={s.errorDismiss}>✕</Text>
-          </Pressable>
-        </View>
-      )}
+        {error ? (
+          <View style={styles.errorBar}>
+            <Text style={styles.errorIcon}>!</Text>
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable onPress={() => useChatStore.getState().setError(null)}>
+              <Text style={styles.errorDismiss}>✕</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
-      {/* Input */}
-      <MessageInput
-        onSend={sendMessage}
-        onStop={stopGeneration}
-        isStreaming={isStreaming}
-        modelName={modelName}
-      />
-    </KeyboardAvoidingView>
+        <MessageInput
+          value={composerText}
+          onChangeText={setComposerText}
+          onSend={(content) => void handleSend(content)}
+          onStop={stopGeneration}
+          isStreaming={isStreaming}
+          isEditing={Boolean(editingMessageId)}
+          modelName={modelLabel}
+          onCancelEdit={() => {
+            setEditingMessageId(null);
+            setComposerText('');
+          }}
+        />
+
+        <ChatSidebar
+          visible={sidebarVisible}
+          activeConversationId={id ?? null}
+          conversations={conversations}
+          currentModelLabel={modelLabel}
+          inferenceProviderLabel={providerSubtitle}
+          onClose={() => setSidebarVisible(false)}
+          onDeleteConversation={handleDeleteConversation}
+          onNewChat={() => void handleNewChat()}
+          onOpenModels={() => {
+            setSidebarVisible(false);
+            router.push('/models');
+          }}
+          onOpenSettings={() => {
+            setSidebarVisible(false);
+            router.push('/settings');
+          }}
+          onSelectConversation={handleSelectConversation}
+        />
+
+        <ModelPicker
+          visible={modelPickerVisible}
+          inferenceProvider={inferenceProvider}
+          desktopModels={desktopModels}
+          currentDesktopModel={defaultModel}
+          currentLocalModelPath={localModelPath}
+          localModels={models}
+          isDesktopConnected={isConnected}
+          onClose={() => setModelPickerVisible(false)}
+          onOpenModels={() => {
+            setModelPickerVisible(false);
+            router.push('/models');
+          }}
+          onOpenSettings={() => {
+            setModelPickerVisible(false);
+            router.push('/settings');
+          }}
+          onSetProvider={setInferenceProvider}
+          onSelectDesktopModel={setDefaultModel}
+          onSelectLocalModel={(model) => {
+            setInferenceProvider('local');
+            setLocalModel({ path: model.path, name: model.name });
+          }}
+        />
+      </KeyboardAvoidingView>
+    </>
   );
 }
 
-const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  listContent: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  listContentEmpty: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-
-  // Date separators
-  dateSeparator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  dateLine: {
-    flex: 1,
-    height: 0.5,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  dateText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.25)',
-    letterSpacing: 0.3,
-  },
-
-  // Empty state
-  emptyContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyLogo: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: 'rgba(99,102,241,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    borderWidth: 0.5,
-    borderColor: 'rgba(99,102,241,0.2)',
-  },
-  emptyLogoText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: 'rgba(129,140,248,0.8)',
-    letterSpacing: -0.3,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: 6,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.3)',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 28,
-  },
-  promptsGrid: {
-    width: '100%',
-    gap: 8,
-  },
-  promptChip: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 16,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  promptChipPressed: {
-    backgroundColor: 'rgba(99,102,241,0.1)',
-    borderColor: 'rgba(99,102,241,0.2)',
-  },
-  promptLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(129,140,248,0.7)',
-    marginBottom: 3,
-  },
-  promptText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.4)',
-    lineHeight: 18,
-  },
-
-  // Scroll to bottom
+const styles = StyleSheet.create({
   scrollDownWrap: {
     position: 'absolute',
     right: 16,
@@ -544,8 +707,6 @@ const s = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(255,255,255,0.6)',
   },
-
-  // Error bar
   errorBar: {
     flexDirection: 'row',
     alignItems: 'center',

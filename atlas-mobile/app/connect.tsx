@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
-  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
@@ -17,33 +16,16 @@ import { useConnectionStore } from '@/store/connection.store';
 function GlassContainer({ children }: { children: React.ReactNode }) {
   if (Platform.OS === 'ios') {
     return (
-      <View style={glassStyles.wrapper}>
-        <BlurView intensity={30} tint="dark" style={glassStyles.blur}>
-          <View style={glassStyles.overlay}>{children}</View>
+      <View className="overflow-hidden rounded-3xl border border-white/10">
+        <BlurView intensity={30} tint="dark">
+          <View className="bg-white/[0.03] p-6">{children}</View>
         </BlurView>
       </View>
     );
   }
-  return <View style={glassStyles.fallback}>{children}</View>;
-}
 
-const glassStyles = StyleSheet.create({
-  wrapper: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  blur: { overflow: 'hidden' },
-  overlay: { backgroundColor: 'rgba(255,255,255,0.03)', padding: 24 },
-  fallback: {
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.06)',
-    padding: 24,
-  },
-});
+  return <View className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">{children}</View>;
+}
 
 export default function ConnectScreen() {
   const router = useRouter();
@@ -56,109 +38,113 @@ export default function ConnectScreen() {
 
   const handleConnect = async () => {
     const trimmedIp = ip.trim();
+    const parsedPort = parseInt(port, 10) || 3001;
+
     if (!trimmedIp) {
       setError('Please enter an IP address');
       return;
     }
+
     setIsConnecting(true);
     setError(null);
-    const success = await connectToDesktop(trimmedIp, parseInt(port, 10) || 3001);
+
+    const success = await connectToDesktop(trimmedIp, parsedPort);
+
     if (success) {
-      router.replace('/(tabs)');
+      router.replace('/chat');
     } else {
-      setError('Could not connect. Ensure Atlas AI Desktop is running and both devices share the same Wi-Fi.');
+      setError(
+        'Could not connect. Make sure Atlas AI Desktop is running and both devices are on the same Wi-Fi network.'
+      );
     }
+
     setIsConnecting(false);
   };
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-[#0a0a0a]"
-    >
+      className="flex-1 bg-[#0a0a0a]">
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Header */}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24 }}
+        keyboardShouldPersistTaps="handled">
         <View className="mb-10 items-center">
-          <View className="mb-5 h-24 w-24 items-center justify-center rounded-[28px] bg-indigo-500/10">
-            <Text className="text-2xl font-black tracking-tighter text-indigo-400">Atlas</Text>
+          <View className="mb-4 h-20 w-20 items-center justify-center rounded-2xl bg-indigo-600/20">
+            <Text className="text-4xl">🧠</Text>
           </View>
-          <Text className="mb-2 text-[26px] font-bold tracking-tight text-white">
-            Connect to Desktop
-          </Text>
-          <Text className="max-w-[280px] text-center text-[14px] leading-5 text-white/35">
-            Enter the IP from your Atlas AI Desktop app
+          <Text className="mb-2 text-2xl font-bold text-white">Connect to Desktop</Text>
+          <Text className="text-center text-sm leading-5 text-white/50">
+            Enter the IP address shown in your Atlas AI Desktop app. Both devices must be on the
+            same Wi-Fi network.
           </Text>
         </View>
 
-        {/* Form Card */}
         <GlassContainer>
-          <View className="mb-5">
-            <Text className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-white/30">
-              IP Address
+          <View className="mb-4">
+            <Text className="mb-2 text-sm font-medium uppercase tracking-[1.2px] text-white/35">
+              Desktop IP Address
             </Text>
             <TextInput
               value={ip}
-              onChangeText={(v) => { setIp(v); setError(null); }}
-              placeholder="192.168.1.100"
-              placeholderTextColor="rgba(255,255,255,0.15)"
+              onChangeText={(value) => {
+                setIp(value);
+                setError(null);
+              }}
+              placeholder="e.g. 192.168.1.100"
+              placeholderTextColor="rgba(255,255,255,0.25)"
               keyboardType="decimal-pad"
               autoCapitalize="none"
               autoCorrect={false}
               editable={!isConnecting}
-              className="rounded-2xl border border-white/[0.08] bg-white/[0.05] px-4 py-4 text-[17px] text-white"
+              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 text-base text-white"
             />
           </View>
 
           <View className="mb-6">
-            <Text className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-white/30">
+            <Text className="mb-2 text-sm font-medium uppercase tracking-[1.2px] text-white/35">
               Port
             </Text>
             <TextInput
               value={port}
-              onChangeText={(v) => { setPort(v); setError(null); }}
+              onChangeText={(value) => {
+                setPort(value);
+                setError(null);
+              }}
               placeholder="3001"
-              placeholderTextColor="rgba(255,255,255,0.15)"
+              placeholderTextColor="rgba(255,255,255,0.25)"
               keyboardType="number-pad"
               editable={!isConnecting}
-              className="rounded-2xl border border-white/[0.08] bg-white/[0.05] px-4 py-4 text-[17px] text-white"
+              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 text-base text-white"
             />
           </View>
 
-          {error && (
-            <View className="mb-5 flex-row items-start gap-2.5 rounded-2xl border border-red-500/10 bg-red-500/[0.07] px-4 py-3">
-              <Text className="text-[13px] text-red-400">!</Text>
-              <Text className="flex-1 text-[13px] leading-5 text-red-400/90">{error}</Text>
+          {error ? (
+            <View className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+              <Text className="text-sm leading-5 text-red-400">{error}</Text>
             </View>
-          )}
+          ) : null}
 
           <Pressable
             onPress={handleConnect}
             disabled={isConnecting}
             className={`items-center rounded-2xl py-4 ${
-              isConnecting ? 'bg-indigo-600/50' : 'bg-indigo-600 active:bg-indigo-500'
-            }`}
-          >
+              isConnecting ? 'bg-indigo-600/50' : 'bg-indigo-600 active:bg-indigo-700'
+            }`}>
             {isConnecting ? (
-              <View className="flex-row items-center gap-2.5">
+              <View className="flex-row items-center gap-2">
                 <ActivityIndicator color="#ffffff" size="small" />
-                <Text className="text-[16px] font-semibold text-white">Connecting...</Text>
+                <Text className="text-base font-semibold text-white">Connecting...</Text>
               </View>
             ) : (
-              <Text className="text-[16px] font-semibold text-white">Connect</Text>
+              <Text className="text-base font-semibold text-white">Connect</Text>
             )}
           </Pressable>
         </GlassContainer>
 
-        {/* Hint */}
-        <View className="mt-8 items-center px-4">
-          <Text className="text-center text-[12px] leading-5 text-white/20">
-            Look for the LAN IP in the desktop app's server logs{'\n'}
-            <Text className="font-mono text-white/30">http://192.168.x.x:3001</Text>
-          </Text>
-        </View>
+        <Text className="mt-6 text-center text-xs leading-4 text-white/30">
+          You can find the IP address in Atlas AI Desktop under Settings or in the title bar. The
+          default port is 3001.
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );

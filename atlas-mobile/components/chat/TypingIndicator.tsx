@@ -1,13 +1,13 @@
-import { View, Text, StyleSheet } from 'react-native';
 import { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  useSharedValue,
+  FadeIn,
   useAnimatedStyle,
+  useSharedValue,
+  withDelay,
   withRepeat,
   withSequence,
   withTiming,
-  withDelay,
-  FadeIn,
 } from 'react-native-reanimated';
 
 function Dot({ delay }: { delay: number }) {
@@ -17,25 +17,16 @@ function Dot({ delay }: { delay: number }) {
   useEffect(() => {
     translateY.value = withDelay(
       delay,
-      withRepeat(
-        withSequence(
-          withTiming(-4, { duration: 300 }),
-          withTiming(0, { duration: 300 }),
-        ),
-        -1,
-      ),
+      withRepeat(withSequence(withTiming(-4, { duration: 300 }), withTiming(0, { duration: 300 })), -1)
     );
     opacity.value = withDelay(
       delay,
       withRepeat(
-        withSequence(
-          withTiming(1, { duration: 300 }),
-          withTiming(0.4, { duration: 300 }),
-        ),
-        -1,
-      ),
+        withSequence(withTiming(1, { duration: 300 }), withTiming(0.4, { duration: 300 })),
+        -1
+      )
     );
-  }, [delay, translateY, opacity]);
+  }, [delay, opacity, translateY]);
 
   const style = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],

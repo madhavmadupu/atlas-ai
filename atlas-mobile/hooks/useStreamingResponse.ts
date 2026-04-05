@@ -1,8 +1,10 @@
-import { useRef, useCallback } from 'react';
-import { useChatStore } from '@/store/chat.store';
-import { useConnectionStore } from '@/store/connection.store';
+import { useCallback, useRef } from 'react';
 import { routes } from '@/lib/api';
+import { localLlamaEngine } from '@/lib/local-llama-engine';
+import { validateLocalChatModel } from '@/lib/model-validation';
 import { getPersona } from '@/lib/personas';
+import { useConnectionStore } from '@/store/connection.store';
+import { useChatStore } from '@/store/chat.store';
 
 export function useStreamingResponse(conversationId: string | null) {
   const abortRef = useRef<AbortController | null>(null);
@@ -17,22 +19,28 @@ export function useStreamingResponse(conversationId: string | null) {
     createConversation,
   } = useChatStore();
 
-  const defaultModel = useConnectionStore((s) => s.defaultModel);
+  const defaultModel = useConnectionStore((state) => state.defaultModel);
+  const inferenceProvider = useConnectionStore((state) => state.inferenceProvider);
+  const localModelPath = useConnectionStore((state) => state.localModelPath);
+  const localModelName = useConnectionStore((state) => state.localModelName);
+  const localSettings = useConnectionStore((state) => state.localSettings);
 
   const sendMessage = useCallback(
     async (content: string) => {
       let convId = conversationId;
-      const model = defaultModel ?? 'llama3.2:3b';
+      const model =
+        inferenceProvider === 'local'
+          ? (localModelName ?? 'On-device GGUF')
+          : (defaultModel ?? 'llama3.2:3b');
 
       if (!convId) {
         convId = await createConversation(model);
       }
 
-      addUserMessage(content);
+      addUserMessage(content, convId);
       startStreaming();
 
-      // Inject persona system prompt if applicable
-      const conversation = useChatStore.getState().conversations.find((c) => c.id === convId);
+      const conversation = useChatStore.getState().conversations.find((item) => item.id === convId);
       const persona = getPersona(conversation?.persona_id);
       const systemMessages = persona.systemPrompt
         ? [{ role: 'system' as const, content: persona.systemPrompt }]
@@ -40,53 +48,82 @@ export function useStreamingResponse(conversationId: string | null) {
 
       const allMessages = [
         ...systemMessages,
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ...messages.map((message) => ({ role: message.role, content: message.content })),
         { role: 'user' as const, content },
       ];
 
       try {
-        abortRef.current = new AbortController();
-
-        const res = await fetch(routes.chat(), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'text/event-stream',
-          },
-          body: JSON.stringify({
-            conversationId: convId,
-            model,
-            messages: allMessages,
-          }),
-          signal: abortRef.current.signal,
-        });
-
-        if (!res.ok) throw new Error(`Chat failed: ${res.status}`);
-
-        // React Native fetch returns the full body as text
-        // For streaming, we poll the response text
-        const text = await res.text();
-
-        // Parse SSE lines from the complete response
-        for (const line of text.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-            if (event.token) appendStreamToken(event.token);
-            if (event.error) throw new Error(event.error);
-          } catch (e) {
-            if (e instanceof SyntaxError) continue;
-            throw e;
+        if (inferenceProvider === 'local') {
+          if (!localModelPath) {
+            throw new Error(
+              'No local model selected. Download or import one from the Models page.'
+            );
           }
-        }
 
-        finishStreaming();
-      } catch (e) {
-        if (e instanceof Error && e.name === 'AbortError') {
+          const validation = validateLocalChatModel([localModelName, localModelPath]);
+          if (!validation.isChatCapable) {
+            throw new Error(validation.reason);
+          }
+
+          const localMessages = localSettings.systemPrompt.trim()
+            ? [
+                ...systemMessages,
+                { role: 'system' as const, content: localSettings.systemPrompt.trim() },
+                ...messages.map((message) => ({ role: message.role, content: message.content })),
+                { role: 'user' as const, content },
+              ]
+            : allMessages;
+
+          await localLlamaEngine.chat(
+            localModelPath,
+            localMessages,
+            localSettings,
+            appendStreamToken
+          );
+          finishStreaming();
+        } else {
+          abortRef.current = new AbortController();
+
+          const response = await fetch(routes.chat(), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'text/event-stream',
+            },
+            body: JSON.stringify({
+              conversationId: convId,
+              model,
+              messages: allMessages,
+            }),
+            signal: abortRef.current.signal,
+          });
+
+          if (!response.ok) {
+            throw new Error(`Chat failed: ${response.status}`);
+          }
+
+          const text = await response.text();
+
+          for (const line of text.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const event = JSON.parse(line.slice(6));
+              if (event.token) appendStreamToken(event.token);
+              if (event.error) throw new Error(event.error);
+            } catch (error) {
+              if (error instanceof SyntaxError) continue;
+              throw error;
+            }
+          }
+
+          finishStreaming();
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
           finishStreaming();
           return;
         }
-        setError(e instanceof Error ? e.message : 'Connection error');
+        setError(error instanceof Error ? error.message : 'Connection error');
       } finally {
         abortRef.current = null;
       }
@@ -94,6 +131,10 @@ export function useStreamingResponse(conversationId: string | null) {
     [
       conversationId,
       defaultModel,
+      inferenceProvider,
+      localModelName,
+      localModelPath,
+      localSettings,
       messages,
       addUserMessage,
       startStreaming,
@@ -101,12 +142,17 @@ export function useStreamingResponse(conversationId: string | null) {
       finishStreaming,
       setError,
       createConversation,
-    ],
+    ]
   );
 
   const stopGeneration = useCallback(() => {
+    if (inferenceProvider === 'local') {
+      localLlamaEngine.stop();
+      return;
+    }
+
     abortRef.current?.abort();
-  }, []);
+  }, [inferenceProvider]);
 
   return { sendMessage, stopGeneration };
 }

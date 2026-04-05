@@ -1,4 +1,6 @@
 export type MessageRole = 'user' | 'assistant' | 'system';
+export type InferenceProvider = 'desktop' | 'local';
+export type DevicePerformanceTier = 'low' | 'medium' | 'high';
 
 export interface Message {
   id: string;
@@ -33,4 +35,16 @@ export interface StreamEvent {
   token?: string;
   done?: boolean;
   error?: string;
+}
+
+export type LocalModelSource = 'huggingface' | 'manual';
+
+export interface LocalInferenceSettings {
+  performanceTier: DevicePerformanceTier;
+  systemPrompt: string;
+  temperature: number;
+  topP: number;
+  maxTokens: number;
+  contextSize: number;
+  gpuLayers: number;
 }

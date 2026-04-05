@@ -1,22 +1,23 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  View,
-  TextInput,
-  Pressable,
-  Text,
-  Platform,
-  StyleSheet,
   Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -24,35 +25,29 @@ interface Props {
   onSend: (content: string) => void;
   onStop: () => void;
   isStreaming: boolean;
+  onChangeText: (value: string) => void;
+  onCancelEdit?: () => void;
+  value: string;
+  isEditing?: boolean;
   modelName?: string;
 }
 
-export function MessageInput({ onSend, onStop, isStreaming, modelName }: Props) {
-  const [input, setInput] = useState('');
-  const [inputHeight, setInputHeight] = useState(36);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+export function MessageInput({
+  onSend,
+  onStop,
+  isStreaming,
+  onChangeText,
+  onCancelEdit,
+  value,
+  isEditing,
+  modelName,
+}: Props) {
   const insets = useSafeAreaInsets();
+  const keyboardVisible = useSharedKeyboardVisibility();
 
   const sendScale = useSharedValue(1);
   const sendOpacity = useSharedValue(0);
-
-  useEffect(() => {
-    const showSub = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => setKeyboardVisible(true),
-    );
-    const hideSub = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setKeyboardVisible(false),
-    );
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  const hasText = input.trim().length > 0;
+  const hasText = value.trim().length > 0;
 
   useEffect(() => {
     sendOpacity.value = withTiming(hasText ? 1 : 0.3, { duration: 150 });
@@ -62,67 +57,68 @@ export function MessageInput({ onSend, onStop, isStreaming, modelName }: Props) 
   }, [hasText, sendOpacity, sendScale]);
 
   const handleSend = useCallback(() => {
-    const trimmed = input.trim();
+    const trimmed = value.trim();
     if (!trimmed || isStreaming) return;
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch {
-      // Haptics not available
+      // noop
     }
     sendScale.value = withSpring(0.85, { damping: 8 }, () => {
       sendScale.value = withSpring(1, { damping: 12 });
     });
     onSend(trimmed);
-    setInput('');
-    setInputHeight(36);
-  }, [input, isStreaming, onSend, sendScale]);
+  }, [isStreaming, onSend, sendScale, value]);
 
   const handleStop = useCallback(() => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch {
-      // Haptics not available
+      // noop
     }
     onStop();
   }, [onStop]);
-
-  const onContentSizeChange = useCallback((e: any) => {
-    const h = e.nativeEvent.contentSize.height;
-    setInputHeight(Math.min(Math.max(h, 36), 120));
-  }, []);
-
-  const bottomPad = keyboardVisible ? 4 : Math.max(insets.bottom, 8);
 
   const sendAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: sendScale.value }],
     opacity: sendOpacity.value,
   }));
 
-  const charCount = input.length;
+  const bottomPad = keyboardVisible ? 4 : Math.max(insets.bottom, 8);
+  const charCount = value.length;
   const showCharCount = charCount > 200;
 
-  const InputContent = (
+  const inputContent = (
     <View style={[styles.contentWrap, { paddingBottom: bottomPad }]}>
-      {/* Model indicator */}
-      {modelName && !keyboardVisible && (
+      {modelName && !keyboardVisible ? (
         <View style={styles.modelRow}>
           <View style={styles.modelDot} />
           <Text style={styles.modelText}>{modelName}</Text>
         </View>
-      )}
+      ) : null}
+
+      {isEditing ? (
+        <View style={styles.editBanner}>
+          <View style={styles.editBannerLeft}>
+            <Ionicons name="create-outline" size={16} color="#fcd34d" />
+            <Text style={styles.editBannerText}>Editing previous prompt</Text>
+          </View>
+          <Pressable onPress={onCancelEdit}>
+            <Text style={styles.editBannerAction}>Cancel</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={styles.inputRow}>
         <TextInput
-          ref={inputRef}
-          value={input}
-          onChangeText={setInput}
-          onContentSizeChange={onContentSizeChange}
+          value={value}
+          onChangeText={onChangeText}
           placeholder="Message Atlas AI..."
           placeholderTextColor="rgba(255,255,255,0.35)"
           editable={!isStreaming}
           multiline
           maxLength={4000}
-          style={[styles.textInput, { height: inputHeight }]}
+          style={styles.textInput}
           keyboardAppearance="dark"
           returnKeyType="default"
         />
@@ -135,14 +131,12 @@ export function MessageInput({ onSend, onStop, isStreaming, modelName }: Props) 
           <AnimatedPressable
             onPress={handleSend}
             disabled={!hasText}
-            style={[styles.sendBtn, hasText && styles.sendActive, sendAnimStyle]}
-          >
+            style={[styles.sendBtn, hasText && styles.sendActive, sendAnimStyle]}>
             <Text style={[styles.sendArrow, hasText && styles.sendArrowActive]}>↑</Text>
           </AnimatedPressable>
         )}
       </View>
 
-      {/* Footer row: char count + privacy note */}
       <View style={styles.footerRow}>
         {showCharCount ? (
           <Text style={[styles.charCount, charCount > 3500 && styles.charCountWarn]}>
@@ -159,12 +153,34 @@ export function MessageInput({ onSend, onStop, isStreaming, modelName }: Props) 
   if (Platform.OS === 'ios') {
     return (
       <BlurView intensity={80} tint="dark" style={styles.container}>
-        <View style={styles.glassOverlay}>{InputContent}</View>
+        <View style={styles.glassOverlay}>{inputContent}</View>
       </BlurView>
     );
   }
 
-  return <View style={[styles.container, styles.fallback]}>{InputContent}</View>;
+  return <View style={[styles.container, styles.fallback]}>{inputContent}</View>;
+}
+
+function useSharedKeyboardVisibility(): boolean {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setVisible(false)
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  return visible;
 }
 
 const styles = StyleSheet.create({
@@ -200,6 +216,35 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.3)',
     fontWeight: '500',
   },
+  editBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 16,
+    borderWidth: 0.5,
+    borderColor: 'rgba(252,211,77,0.25)',
+    backgroundColor: 'rgba(252,211,77,0.08)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  editBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fde68a',
+  },
+  editBannerAction: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fde68a',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -213,12 +258,15 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
+    minHeight: 36,
+    maxHeight: 120,
     paddingHorizontal: 14,
     paddingTop: 8,
     paddingBottom: 8,
     fontSize: 16,
     color: '#ffffff',
     lineHeight: 22,
+    textAlignVertical: 'top',
   },
   stopBtn: {
     width: 34,

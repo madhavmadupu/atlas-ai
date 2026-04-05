@@ -1,0 +1,480 @@
+Atlas AI — Project Documentation (Data-Only)
+Generated: 2026-04-04 (UTC)
+
+================================================================================
+1) Project Summary (Mobile-First)
+================================================================================
+Name: Atlas AI
+Primary goal: A privacy-first assistant that can run fully offline on the user’s phone.
+Secondary goal: Optional LAN “desktop-backed” mode for heavier models when available.
+
+Explicit exclusions / non-goals:
+- No cloud inference APIs
+- No telemetry/analytics
+- No accounts
+
+Two inference providers (mobile app):
+- "local" (PRIMARY): on-device GGUF inference (fully offline, no desktop required)
+- "desktop" (FALLBACK): connect to a desktop on the same LAN for inference/persistence
+
+
+================================================================================
+2) Core Feature Focus: On-Phone Model Runtime (Local Provider)
+================================================================================
+2.1 What “local” means
+- The phone runs a GGUF model in-process via a native llama.cpp bridge.
+- The model file is stored inside the app sandbox and selected as the active model.
+- The UI and chat features operate without any desktop connection.
+
+2.2 Inference engine (conceptual behavior)
+Initialization / context:
+- Model path is a local file URI (file://...) pointing to a GGUF stored on-device.
+- A context is initialized with:
+  - n_ctx: context size (tier-based default)
+  - n_gpu_layers: GPU layers (tier-based default; falls back if unsupported)
+  - n_parallel: 1 (single-stream generation)
+  - n_batch: tier-based (low/medium/high)
+- The engine can reuse an existing context if (modelPath + key settings) are unchanged.
+- A cache clear is performed before each completion to avoid cross-request contamination.
+
+Token streaming:
+- The engine invokes a completion request that calls a token callback for each token chunk.
+- The UI appends tokens into a “streamingContent” buffer and finalizes into an assistant message.
+
+Stopping generation:
+- The engine keeps a per-request stop handle and can stop an in-flight generation.
+
+Stop conditions (stop words):
+- Local generation stops when it emits common end tokens like:
+  - </s>
+  - <|end|>
+  - <|eot_id|>
+  - <|end_of_text|>
+  - <|im_end|>
+  - <|END_OF_TURN_TOKEN|>
+  - <|end_of_turn|>
+
+2.3 Local persistence model (phone)
+Conversations/messages:
+- Stored on the phone (AsyncStorage), in a single versioned JSON object:
+  - conversations: array of Conversation
+  - messagesByConversation: map from conversationId -> array of Message
+
+Conversation title behavior (local):
+- New conversations start with title "New Conversation".
+- On the first user message, the app auto-derives a title:
+  - If content <= 48 chars: title = content (normalized whitespace)
+  - If longer: title = first 45 chars + "..."
+
+2.4 Local GGUF file storage (phone)
+Storage location:
+- Stored under an app-managed folder named "atlas-models/" inside the app document directory.
+
+Filename safety:
+- Model IDs are normalized to a safe subset (letters/digits/_/-), replacing other chars with "_".
+- Stored filename includes both modelId and file name to avoid collisions.
+
+2.5 Model validation (prevent wrong GGUF class)
+Before allowing chat, the app rejects local model selections that appear to be:
+- Multimodal projector files ("mmproj")
+- Embedding models ("embedding" or "embed")
+- Reranker models ("rerank" or "reranker")
+
+If any of the above is detected, chat is blocked with a user-visible error describing why.
+
+2.6 Device performance tiers (local inference defaults)
+Tier list:
+- low
+- medium
+- high
+
+Defaults (per tier):
+- low:
+  - contextSize: 2048
+  - maxTokens: 256
+  - gpuLayers: 0
+  - topP: 0.90
+  - n_batch: 128
+- medium:
+  - contextSize: 3072
+  - maxTokens: 384
+  - gpuLayers: 32
+  - topP: 0.92
+  - n_batch: 256
+- high:
+  - contextSize: 4096
+  - maxTokens: 512
+  - gpuLayers: 99
+  - topP: 0.95
+  - n_batch: 512
+
+Common defaults (all tiers):
+- temperature: 0.7
+- system prompt (default):
+  "You are Atlas AI, a private offline assistant running locally on the user device. Give concise, accurate answers and say when you are unsure."
+
+Tier-based model recommendations (Hugging Face repos, examples):
+- low:    Qwen2.5 1.5B Instruct GGUF (suggested quant: Q4_K_M; ~1 GB)
+- medium: Qwen2.5 3B Instruct GGUF   (suggested quant: Q4_K_M; ~2 GB)
+- high:   Qwen2.5 7B Instruct GGUF   (suggested quant: Q4_K_M; ~4.5 GB)
+
+2.7 Hugging Face model discovery/download (local provider support)
+Public API endpoints used:
+- Search:
+  - GET https://huggingface.co/api/models?search=<query>&sort=downloads&limit=20
+- File listing:
+  - GET https://huggingface.co/api/models/<modelId>?full=true
+
+Authorization:
+- Optional Authorization header:
+  - Authorization: Bearer <token>
+- Required for private/gated models.
+
+GGUF selection heuristic (tier-aware):
+- Filters for files ending in .gguf
+- Chooses the best match based on quantization preferences for the tier (e.g., Q4_K_M, Q5_K_M, Q8_0)
+- Falls back to the first GGUF found if no preferred quantization match exists
+
+
+================================================================================
+3) Mobile App: Provider Split (Local Primary, Desktop Fallback)
+================================================================================
+3.1 Provider: "local" (PRIMARY)
+- Inference: on-device llama.cpp via native bridge (GGUF)
+- Persistence: on-phone (AsyncStorage)
+- Model storage: on-phone (app sandbox document directory)
+- Works without network and without desktop
+
+3.2 Provider: "desktop" (FALLBACK)
+- Inference: desktop Ollama via LAN API
+- Persistence: desktop SQLite via LAN API
+- Intended when the user wants larger models or faster throughput than the phone can sustain
+- Requires desktop and phone on the same trusted LAN
+
+Provider readiness gating (prevent “half-configured” chat):
+- local requires an active GGUF model selected
+- desktop requires a saved endpoint that responds to health checks
+
+
+================================================================================
+4) Mobile Settings & Persistence (Provider-Aware)
+================================================================================
+Provider selection:
+- inferenceProvider: "local" | "desktop"
+
+Desktop provider settings (mobile):
+- desktopIP: string | null
+- desktopPort: number (default 3001)
+- isConnected: boolean (derived by health checks)
+- defaultModel: string | null (desktop-side Ollama model name)
+- desktopModels: string[] (cached list)
+
+Desktop connection behavior:
+- connectToDesktop(ip, port):
+  - checks health endpoint for reachability
+  - fetches model list
+  - selects a default model (existing if still present; else first available)
+- checkConnection():
+  - pings health and refreshes models on success
+
+Local provider settings (mobile):
+- localModelPath: string | null (file:// URI)
+- localModelName: string | null
+- huggingFaceToken: string | null
+- localSettings:
+  - performanceTier (low|medium|high)
+  - systemPrompt
+  - temperature, topP
+  - maxTokens, contextSize, gpuLayers
+
+
+================================================================================
+5) Mobile UX: Streaming & Message Lifecycle (Provider-Aware)
+================================================================================
+Common UI behavior:
+- User message is appended immediately to UI state.
+- Assistant response is streamed into a “streamingContent” buffer.
+- On completion, streamingContent is committed as a final assistant message.
+
+Local provider streaming:
+- True incremental token callbacks from the native engine.
+- Stop/cancel uses a per-request stop handle.
+
+Desktop provider streaming (mobile-specific nuance):
+- Desktop returns SSE token events.
+- In React Native environments, fetch commonly materializes response bodies as a complete string;
+  token updates are parsed from the SSE text after it is received (so UX may feel less “live” than on desktop UI).
+
+
+================================================================================
+6) Tech Stack (High Level)
+================================================================================
+Mobile (primary runtime):
+- Expo + React Native (mobile UI + navigation)
+- Zustand (client-side state)
+- AsyncStorage (local persistence for local provider)
+- Expo FileSystem (stores GGUF files in app sandbox)
+- Native llama.cpp bridge (llama.rn) for on-device GGUF inference
+
+Desktop (fallback runtime):
+- Electron (native shell)
+- Fastify (LAN HTTP API + SSE streaming + static UI hosting)
+- SQLite (desktop persistence)
+- Ollama (desktop model runtime)
+- Next.js (desktop UI exported as static assets)
+
+
+================================================================================
+7) Desktop Fallback Architecture (When Using Provider "desktop")
+================================================================================
+Desktop app responsibilities:
+- Ensure Ollama runtime is running (or start a bundled/system Ollama)
+- Start a LAN-accessible Fastify server (API + UI)
+- Persist chats and settings into SQLite
+- Provide a desktop UI (static-exported) for local use on the machine
+
+Networking model (desktop):
+- Fastify:
+  - port 3001
+  - host 0.0.0.0 (LAN accessible)
+- Ollama:
+  - port 11434
+  - assumed on localhost for desktop services
+
+LAN access:
+- Mobile desktop-provider calls:
+  - http://<desktop-lan-ip>:3001/api/*
+- CORS is permissive to support local/LAN usage (not intended for public internet exposure)
+
+
+================================================================================
+8) Desktop LAN API Contract (Fastify, prefix = /api)
+================================================================================
+8.1 Health
+- GET /health
+  Response (JSON):
+  - status: "ok"
+  - app: "Atlas AI"
+  - version: "0.1.0"
+  - lanIP: string | null
+  - timestamp: ISO string
+
+- GET /health/ollama
+  Response (JSON):
+  - status: "running" | "offline"
+
+8.2 Conversations
+- GET /conversations
+  Response: array of conversation rows from SQLite (includes timestamps).
+
+- GET /conversations/:id
+  Response:
+  - conversation fields (SQLite row)
+  - messages: array of message rows for that conversation (sorted ascending by created_at)
+  Error case:
+  - { error: "Not found" }
+
+- POST /conversations
+  Request body (JSON):
+  - id: string
+  - title: string
+  - model: string
+  - systemPrompt?: string
+  - createdAt: ISO string
+  - updatedAt: ISO string
+  Response:
+  - { success: true, id: string }
+
+- DELETE /conversations/:id
+  Response:
+  - { success: true }
+
+8.3 Chat (SSE token streaming)
+- POST /chat
+  Content-Type: application/json
+  Accept: text/event-stream
+  Request body (JSON):
+  - conversationId?: string
+  - model: string (desktop Ollama model name, e.g. "qwen2.5:3b")
+  - messages: [{ role: "user"|"assistant"|"system", content: string }, ...]
+  - systemPrompt?: string (if provided, prepended as an extra system message)
+
+  Response: Server-Sent Events (SSE)
+  Each SSE line is emitted as:
+  - data: { "token": "..." }
+  - data: { "done": true }
+  - data: { "error": "..." }
+
+  Desktop persistence behavior:
+  - If conversationId is provided, the server appends the final user message before streaming.
+  - When streaming finishes, it appends the assistant message.
+  - It may auto-generate a title on early conversations and update the conversation title.
+  - Conversation updated_at is refreshed on message writes.
+
+8.4 Models (desktop Ollama)
+- GET /models
+  Response: list of installed Ollama models (or [] if Ollama is unreachable).
+
+- POST /models/pull
+  Request body (JSON):
+  - name: string
+  Response: SSE stream of progress objects emitted as `data: {...}` lines.
+  - Typical fields: status, completed, total, digest (depending on Ollama response)
+  - Errors emit: { error: string }
+
+- DELETE /models/:name
+  Response:
+  - { success: true }
+
+8.5 Settings (desktop)
+- GET /settings
+  Response: { [key: string]: string }
+
+- GET /settings/:key
+  Response:
+  - { key: string, value: string | null }
+
+- POST /settings
+  Request body:
+  - key: string
+  - value: string | boolean | number
+  Behavior: value is stored as a string (String(value))
+  Response:
+  - { success: true }
+
+
+================================================================================
+9) Desktop Persistence (SQLite, Fallback Provider Storage)
+================================================================================
+Database filename: atlas.db
+Preferred location in desktop app builds:
+- Electron userData directory (per OS-specific Electron conventions)
+
+Fallback (when the DB directory is not explicitly set):
+- macOS: ~/Library/Application Support/Atlas AI/atlas.db
+- Windows: %APPDATA%\\Atlas AI\\atlas.db
+- Linux: ~/.config/Atlas AI/atlas.db
+
+SQLite pragmas:
+- journal_mode = WAL
+- foreign_keys = ON
+
+Schema (tables and key columns):
+1) conversations
+  - id (TEXT primary key)
+  - title (TEXT, default "New Conversation")
+  - model (TEXT)
+  - system_prompt (TEXT nullable)
+  - created_at (TEXT ISO timestamp)
+  - updated_at (TEXT ISO timestamp)
+
+2) messages
+  - id (TEXT primary key)
+  - conversation_id (TEXT FK -> conversations.id, ON DELETE CASCADE)
+  - role (TEXT, one of user/assistant/system)
+  - content (TEXT)
+  - created_at (TEXT ISO timestamp)
+
+3) settings
+  - key (TEXT primary key)
+  - value (TEXT)
+
+Indexes:
+- idx_messages_conversation_id on messages(conversation_id)
+- idx_conversations_updated_at on conversations(updated_at)
+
+
+================================================================================
+10) Build, Packaging, and Distribution (Operational Data)
+================================================================================
+Mobile (primary path):
+- Expo Go:
+  - Can run the UI and the desktop (LAN) provider.
+  - Cannot run on-device GGUF inference because the native llama bridge is not available in Expo Go.
+- Dev build / release build:
+  - Required for local GGUF inference (native dependencies included).
+
+Mobile build notes (Android emphasis):
+- Release builds should not require a dev server.
+- Toolchain note: JDK 21 is required/recommended for Android builds in this project context.
+
+Mobile configuration highlights:
+- Dark UI by default
+- Local network usage description on iOS for LAN connectivity
+- Android requests network state / Wi‑Fi state permissions
+- New architecture enabled
+- Native llama bridge plugin is enabled with:
+  - entitlements enabled (production profile)
+  - C++20 forced
+  - OpenCL/Hexagon acceleration enabled (when available on device)
+
+Desktop (fallback path):
+- Electron packaging targets:
+  - Windows: NSIS
+  - macOS: DMG
+  - Linux: AppImage
+- Packaged desktop builds can include a bundled Ollama binary for distribution scenarios.
+
+
+================================================================================
+11) Security & Privacy Posture (As Implemented)
+================================================================================
+Privacy commitments:
+- No accounts
+- No analytics/telemetry
+- No cloud inference
+
+On-device inference:
+- Local provider can run fully offline.
+- GGUF models and chat history (local provider) remain on the phone.
+
+Desktop fallback security posture:
+- Renderer runs with contextIsolation enabled and nodeIntegration disabled.
+- Only a narrow IPC bridge is exposed to the renderer for window/system actions.
+
+LAN exposure:
+- Desktop server listens on 0.0.0.0:3001 to allow LAN access from mobile.
+- CORS is permissive to support local/LAN usage.
+- Intended for trusted LAN environments, not public internet exposure.
+
+
+================================================================================
+12) Notable Constraints / Known Limitations
+================================================================================
+Local provider constraints:
+- Expo Go cannot run local GGUF inference (native llama bridge not present).
+- Dev build or release build is required for on-device inference.
+
+Local model constraints:
+- Chat requires a generation (chat/instruct) GGUF.
+- Embedding, reranker, and mmproj files are explicitly rejected to prevent misconfiguration.
+
+Desktop fallback constraints:
+- Requires phone and desktop on the same LAN and a reachable desktop endpoint.
+- Firewalls can block port 3001.
+
+Type-shape drift risk (cross-app boundary):
+- Some entities exist in both snake_case (desktop persistence/API) and camelCase (some UI expectations).
+- Treat HTTP payloads as a distinct contract; translate at the boundary to avoid drift.
+
+Mobile streaming nuance:
+- Desktop SSE streams may not render as perfectly “live” on mobile due to how fetch materializes response bodies.
+
+
+================================================================================
+13) Glossary
+================================================================================
+Local provider:
+- The on-phone mode where the device runs a GGUF model in-process with a native llama.cpp bridge.
+
+Desktop provider:
+- The fallback mode where the phone uses a desktop LAN API for inference and persistence.
+
+GGUF:
+- Model file format commonly used with llama.cpp-compatible runtimes.
+
+SSE (Server-Sent Events):
+- A streaming HTTP response format used to push incremental token updates to clients.
+
+Ollama:
+- Local model runtime on desktop used for chat and model lifecycle in desktop-provider mode.
