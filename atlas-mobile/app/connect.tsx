@@ -9,17 +9,17 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
+import { SafeBlurView } from '@/components/ui/SafeBlurView';
 import { useConnectionStore } from '@/store/connection.store';
 
 function GlassContainer({ children }: { children: React.ReactNode }) {
   if (Platform.OS === 'ios') {
     return (
       <View className="overflow-hidden rounded-3xl border border-white/10">
-        <BlurView intensity={30} tint="dark">
+        <SafeBlurView intensity={30} tint="dark">
           <View className="bg-white/[0.03] p-6">{children}</View>
-        </BlurView>
+        </SafeBlurView>
       </View>
     );
   }

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useAnimatedStyle,
@@ -9,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeBlurView } from '@/components/ui/SafeBlurView';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -128,9 +128,9 @@ export function MessageInput({
 
   if (Platform.OS === 'ios') {
     return (
-      <BlurView intensity={80} tint="dark" style={styles.container}>
+      <SafeBlurView intensity={80} tint="dark" style={styles.container}>
         <View style={styles.glassOverlay}>{inputContent}</View>
-      </BlurView>
+      </SafeBlurView>
     );
   }
 
