@@ -14,7 +14,6 @@ import {
   View,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { BlurView } from 'expo-blur';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { ChatShellHeader } from '@/components/chat/ChatShellHeader';
@@ -23,6 +22,7 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 import { MessageInput } from '@/components/chat/MessageInput';
 import { ModelPicker } from '@/components/chat/ModelPicker';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
+import { SafeBlurView } from '@/components/ui/SafeBlurView';
 import { useStreamingResponse } from '@/hooks/useStreamingResponse';
 import type { Message } from '@/lib/types';
 import { useChatStore } from '@/store/chat.store';
@@ -101,7 +101,7 @@ function MoreMenu({
       <Pressable style={menu.backdrop} onPress={onClose}>
         {Platform.OS === 'ios' ? (
           <View style={menu.glassWrap}>
-            <BlurView intensity={60} tint="dark" style={menu.glass}>
+            <SafeBlurView intensity={60} tint="dark" style={menu.glass}>
               <View style={menu.glassOverlay}>
                 <MenuItem icon="↻" label="Refresh" onPress={() => { onRefresh(); onClose(); }} />
                 <View style={menu.divider} />
@@ -109,7 +109,7 @@ function MoreMenu({
                 <View style={menu.divider} />
                 <MenuItem icon="✕" label="Delete Chat" onPress={() => { onDelete(); onClose(); }} destructive />
               </View>
-            </BlurView>
+            </SafeBlurView>
           </View>
         ) : (
           <View style={menu.sheet}>

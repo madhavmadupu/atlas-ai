@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { BlurView } from 'expo-blur';
 import * as Clipboard from 'expo-clipboard';
 import type { Message } from '@/lib/types';
+import { SafeBlurView } from '@/components/ui/SafeBlurView';
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
@@ -139,9 +139,9 @@ export function MessageBubble({ message, isStreaming, onCopy, onEdit, onRetry, o
       <View style={styles.stack}>
         {Platform.OS === 'ios' && !isUser ? (
           <Pressable onLongPress={handleLongPress} delayLongPress={350} style={styles.glassBubbleWrap}>
-            <BlurView intensity={25} tint="dark" style={styles.glassBubble}>
+            <SafeBlurView intensity={25} tint="dark" style={styles.glassBubble}>
               <View style={styles.glassBubbleInner}>{bubbleContent}</View>
-            </BlurView>
+            </SafeBlurView>
           </Pressable>
         ) : (
           <Pressable
