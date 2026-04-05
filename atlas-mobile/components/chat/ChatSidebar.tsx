@@ -58,8 +58,7 @@ export function ChatSidebar({
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View className="flex-1 flex-row">
-        <Pressable className="flex-1 bg-black/60" onPress={onClose} />
-        <View className="w-[84%] max-w-[360px] border-l border-white/10 bg-[#101014] px-4 pb-6 pt-5">
+        <View className="w-[84%] max-w-[360px] border-r border-white/10 bg-[#101014] px-4 pb-6 pt-5">
           <View className="mb-5 flex-row items-start justify-between">
             <View className="flex-1 pr-3">
               <Text className="text-xl font-semibold text-white">Atlas AI</Text>
@@ -160,6 +159,7 @@ export function ChatSidebar({
             </Pressable>
           </View>
         </View>
+        <Pressable className="flex-1 bg-black/60" onPress={onClose} />
       </View>
     </Modal>
   );
