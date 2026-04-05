@@ -2,12 +2,8 @@ import { useCallback, useRef } from 'react';
 import { routes } from '@/lib/api';
 import { localLlamaEngine } from '@/lib/local-llama-engine';
 import { validateLocalChatModel } from '@/lib/model-validation';
-<<<<<<< HEAD
-=======
-import { getPersona } from '@/lib/personas';
 import { useConnectionStore } from '@/store/connection.store';
 import { useChatStore } from '@/store/chat.store';
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
 
 export function useStreamingResponse(conversationId: string | null) {
   const abortRef = useRef<AbortController | null>(null);
@@ -43,20 +39,8 @@ export function useStreamingResponse(conversationId: string | null) {
       addUserMessage(content, convId);
       startStreaming();
 
-<<<<<<< HEAD
       const allMessages = [
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
-=======
-      const conversation = useChatStore.getState().conversations.find((item) => item.id === convId);
-      const persona = getPersona(conversation?.persona_id);
-      const systemMessages = persona.systemPrompt
-        ? [{ role: 'system' as const, content: persona.systemPrompt }]
-        : [];
-
-      const allMessages = [
-        ...systemMessages,
         ...messages.map((message) => ({ role: message.role, content: message.content })),
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
         { role: 'user' as const, content },
       ];
 
@@ -75,7 +59,6 @@ export function useStreamingResponse(conversationId: string | null) {
 
           const localMessages = localSettings.systemPrompt.trim()
             ? [
-                ...systemMessages,
                 { role: 'system' as const, content: localSettings.systemPrompt.trim() },
                 ...messages.map((message) => ({ role: message.role, content: message.content })),
                 { role: 'user' as const, content },

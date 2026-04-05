@@ -1,35 +1,22 @@
-<<<<<<<< < Temporary merge branch 1
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
-  Alert,
-  Modal,
   Share,
   StyleSheet,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
+  Text,
+  View,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import Animated, { FadeIn, FadeOut, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { useChatStore } from '@/store/chat.store';
-import { useConnectionStore } from '@/store/connection.store';
-import { useStreamingResponse } from '@/hooks/useStreamingResponse';
-=========
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, KeyboardAvoidingView, Platform, Share, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { BlurView } from 'expo-blur';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import Animated, {
-  FadeIn,
-  FadeOut,
-} from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { ChatShellHeader } from '@/components/chat/ChatShellHeader';
 import { ChatSidebar } from '@/components/chat/ChatSidebar';
 import { MessageBubble } from '@/components/chat/MessageBubble';
@@ -37,11 +24,25 @@ import { MessageInput } from '@/components/chat/MessageInput';
 import { ModelPicker } from '@/components/chat/ModelPicker';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import { useStreamingResponse } from '@/hooks/useStreamingResponse';
->>>>>>>>> Temporary merge branch 2
 import type { Message } from '@/lib/types';
 import { useChatStore } from '@/store/chat.store';
 import { useConnectionStore } from '@/store/connection.store';
 import { useModelStore } from '@/store/model.store';
+
+const EMPTY_PROMPTS = [
+  {
+    label: 'Explain the project',
+    text: 'Explain this project architecture and how the desktop and offline mobile flows work.',
+  },
+  {
+    label: 'Choose a model',
+    text: 'Recommend the best local GGUF for this phone and explain the tradeoffs.',
+  },
+  {
+    label: 'Review the UI',
+    text: 'Review this mobile chat UI and suggest the highest-impact improvements.',
+  },
+];
 
 function getRetryPrompt(messages: Message[], message: Message): string | null {
   if (message.role === 'user') return message.content;
@@ -58,8 +59,6 @@ function getRetryPrompt(messages: Message[], message: Message): string | null {
   return null;
 }
 
-// ─── Date Separator ─────────────────────────────────────────────────────────
-
 function formatDateLabel(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
@@ -68,7 +67,11 @@ function formatDateLabel(iso: string): string {
 
   if (diff < dayMs && d.getDate() === now.getDate()) return 'Today';
   if (diff < 2 * dayMs) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
 }
 
 function shouldShowDateSeparator(messages: Message[], index: number): boolean {
@@ -77,8 +80,6 @@ function shouldShowDateSeparator(messages: Message[], index: number): boolean {
   const curr = new Date(messages[index].created_at);
   return prev.toDateString() !== curr.toDateString();
 }
-
-// ─── More Menu ──────────────────────────────────────────────────────────────
 
 function MoreMenu({
   visible,
@@ -136,79 +137,12 @@ function MenuItem({
   destructive?: boolean;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [menu.item, pressed && menu.itemPressed]}
-    >
+    <Pressable onPress={onPress} style={({ pressed }) => [menu.item, pressed && menu.itemPressed]}>
       <Text style={[menu.icon, destructive && menu.destructiveText]}>{icon}</Text>
       <Text style={[menu.label, destructive && menu.destructiveText]}>{label}</Text>
     </Pressable>
   );
 }
-
-const menu = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    paddingTop: Platform.OS === 'ios' ? 100 : 56,
-    paddingRight: 16,
-  },
-  glassWrap: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.18)',
-    minWidth: 200,
-  },
-  glass: {
-    overflow: 'hidden',
-  },
-  glassOverlay: {
-    backgroundColor: 'rgba(30,30,30,0.25)',
-  },
-  sheet: {
-    backgroundColor: '#1c1c1e',
-    borderRadius: 14,
-    minWidth: 200,
-    overflow: 'hidden',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.1)',
-    elevation: 8,
-  },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  itemPressed: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  icon: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.7)',
-    width: 20,
-    textAlign: 'center',
-  },
-  label: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
-    fontWeight: '500',
-  },
-  divider: {
-    height: 0.5,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    marginLeft: 48,
-  },
-  destructiveText: {
-    color: 'rgba(239,68,68,0.9)',
-  },
-});
-
-// ─── Main Screen ────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
   const { id, prefill, autostart } = useLocalSearchParams<{
@@ -229,6 +163,7 @@ export default function ChatScreen() {
     loadConversations,
     messages,
     setActiveConversation,
+    setError,
     streamingContent,
   } = useChatStore();
   const { sendMessage, stopGeneration } = useStreamingResponse(id ?? null);
@@ -290,7 +225,6 @@ export default function ChatScreen() {
     () => conversations.find((item) => item.id === id) ?? null,
     [conversations, id]
   );
-  const persona = getPersona(conversation?.persona_id);
 
   const modelLabel =
     inferenceProvider === 'local'
@@ -303,8 +237,6 @@ export default function ChatScreen() {
       : isConnected
         ? 'Desktop connected'
         : 'Desktop not connected';
-  const headerSubtitle =
-    persona.id !== 'general' ? `${providerSubtitle} · ${persona.name}` : providerSubtitle;
 
   const displayMessages: Message[] = [
     ...messages,
@@ -442,14 +374,10 @@ export default function ChatScreen() {
       })
       .join('\n\n---\n\n');
 
-    try {
-      await Share.share({
-        message: text,
-        title: 'Atlas AI Chat Export',
-      });
-    } catch {
-      // noop
-    }
+    await Share.share({
+      message: text,
+      title: 'Atlas AI Chat Export',
+    });
   }, [messages]);
 
   const handleSend = useCallback(
@@ -488,7 +416,7 @@ export default function ChatScreen() {
         className="flex-1 bg-[#0a0a0a]">
         <ChatShellHeader
           title={conversation?.title ?? 'New chat'}
-          subtitle={headerSubtitle}
+          subtitle={providerSubtitle}
           modelLabel={modelLabel}
           onOpenSidebar={() => setSidebarVisible(true)}
           onOpenModelPicker={openModelPicker}
@@ -513,35 +441,22 @@ export default function ChatScreen() {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View className="items-center px-6">
-              <View
-                className="mb-4 h-16 w-16 items-center justify-center rounded-3xl border"
-                style={{
-                  backgroundColor: persona.accentBg,
-                  borderColor: `${persona.accentColor}33`,
-                }}>
-                <Text style={{ fontSize: 28 }}>{persona.icon}</Text>
+              <View className="mb-4 h-16 w-16 items-center justify-center rounded-3xl border border-indigo-500/20 bg-indigo-500/12">
+                <Text className="text-sm font-extrabold tracking-tight text-indigo-300">AI</Text>
               </View>
-              <Text className="text-3xl font-semibold text-white">
-                {persona.id === 'general' ? 'Start a new conversation' : persona.name}
-              </Text>
+              <Text className="text-3xl font-semibold text-white">Start a new conversation</Text>
               <Text className="mt-3 text-center text-sm leading-6 text-white/45">
-                {persona.description}
+                Send a prompt, use a suggestion, or switch models from the top bar.
               </Text>
               <View className="mt-6 w-full gap-3">
-                {persona.suggestedPrompts.slice(0, 3).map((prompt) => (
-                <Pressable
-                  key={prompt.label}
-                  onPress={() => void handleSend(prompt.text)}
-                  className="rounded-3xl border px-4 py-4"
-                  style={{
-                    borderColor: `${persona.accentColor}22`,
-                    backgroundColor: `${persona.accentColor}11`,
-                  }}>
-                  <Text className="text-sm font-semibold" style={{ color: persona.accentColor }}>
-                    {prompt.label}
-                  </Text>
-                  <Text className="mt-2 text-sm leading-6 text-white/70">{prompt.text}</Text>
-                </Pressable>
+                {EMPTY_PROMPTS.map((prompt) => (
+                  <Pressable
+                    key={prompt.label}
+                    onPress={() => void handleSend(prompt.text)}
+                    className="rounded-3xl border border-indigo-500/15 bg-indigo-500/8 px-4 py-4">
+                    <Text className="text-sm font-semibold text-indigo-300">{prompt.label}</Text>
+                    <Text className="mt-2 text-sm leading-6 text-white/70">{prompt.text}</Text>
+                  </Pressable>
                 ))}
               </View>
             </View>
@@ -598,7 +513,7 @@ export default function ChatScreen() {
           <View style={styles.errorBar}>
             <Text style={styles.errorIcon}>!</Text>
             <Text style={styles.errorText}>{error}</Text>
-            <Pressable onPress={() => useChatStore.getState().setError(null)}>
+            <Pressable onPress={() => setError(null)}>
               <Text style={styles.errorDismiss}>✕</Text>
             </Pressable>
           </View>
@@ -662,111 +577,82 @@ export default function ChatScreen() {
             setLocalModel({ path: model.path, name: model.name });
           }}
         />
+
+        <MoreMenu
+          visible={menuVisible}
+          onClose={() => setMenuVisible(false)}
+          onRefresh={handleRefresh}
+          onDelete={handleDelete}
+          onExport={() => void handleExport()}
+        />
       </KeyboardAvoidingView>
     </>
->>>>>>>>> Temporary merge branch 2
   );
 }
 
-const s = StyleSheet.create({
-  container: {
+const menu = StyleSheet.create({
+  backdrop: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: Platform.OS === 'ios' ? 100 : 56,
+    paddingRight: 16,
   },
-  listContent: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 8,
+  glassWrap: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.18)',
+    minWidth: 200,
   },
-  listContentEmpty: {
-    flexGrow: 1,
-    justifyContent: 'center',
+  glass: {
+    overflow: 'hidden',
   },
-
-  // Date separators
-  dateSeparator: {
+  glassOverlay: {
+    backgroundColor: 'rgba(30,30,30,0.25)',
+  },
+  sheet: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 14,
+    minWidth: 200,
+    overflow: 'hidden',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.1)',
+    elevation: 8,
+  },
+  item: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
   },
-  dateLine: {
-    flex: 1,
-    height: 0.5,
+  itemPressed: {
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  dateText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.25)',
-    letterSpacing: 0.3,
-  },
-
-  // Empty state
-  emptyContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyLogo: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: 'rgba(99,102,241,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    borderWidth: 0.5,
-    borderColor: 'rgba(99,102,241,0.2)',
-  },
-  emptyLogoText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: 'rgba(129,140,248,0.8)',
-    letterSpacing: -0.3,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+  icon: {
+    fontSize: 15,
     color: 'rgba(255,255,255,0.7)',
-    marginBottom: 6,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.3)',
+    width: 20,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 28,
   },
-  promptsGrid: {
-    width: '100%',
-    gap: 8,
+  label: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '500',
   },
-  promptChip: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 16,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  divider: {
+    height: 0.5,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    marginLeft: 48,
   },
-  promptChipPressed: {
-    backgroundColor: 'rgba(99,102,241,0.1)',
-    borderColor: 'rgba(99,102,241,0.2)',
+  destructiveText: {
+    color: 'rgba(239,68,68,0.9)',
   },
-  promptLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(129,140,248,0.7)',
-    marginBottom: 3,
-  },
-  promptText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.4)',
-    lineHeight: 18,
-  },
+});
 
-  // Scroll to bottom
+const styles = StyleSheet.create({
   scrollDownWrap: {
     position: 'absolute',
     right: 16,
@@ -797,8 +683,6 @@ const s = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(255,255,255,0.6)',
   },
-
-  // Error bar
   errorBar: {
     flexDirection: 'row',
     alignItems: 'center',

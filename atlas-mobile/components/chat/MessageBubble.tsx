@@ -1,12 +1,7 @@
-<<<<<<< HEAD
-import { Pressable, Text, View } from 'react-native';
-=======
 import { useCallback } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Clipboard from 'expo-clipboard';
-import * as Haptics from 'expo-haptics';
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
 import type { Message } from '@/lib/types';
 
 function formatTime(iso: string): string {
@@ -47,8 +42,6 @@ function renderInline(text: string): React.ReactNode[] {
   return parts;
 }
 
-<<<<<<< HEAD
-=======
 function renderContent(text: string, isUser: boolean) {
   const parts: React.ReactNode[] = [];
   const codeBlockRegex = /```(?:\w*\n)?([\s\S]*?)```/g;
@@ -88,7 +81,6 @@ function renderContent(text: string, isUser: boolean) {
   return parts;
 }
 
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
 interface Props {
   message: Message;
   isStreaming?: boolean;
@@ -108,102 +100,11 @@ function ActionButton({ label, onPress }: { label: string; onPress: () => void }
 
 export function MessageBubble({ message, isStreaming, onCopy, onEdit, onRetry, onShare }: Props) {
   const isUser = message.role === 'user';
-<<<<<<< HEAD
-  const bubbleClass = isUser
-    ? 'rounded-tr-sm bg-indigo-600'
-    : 'rounded-tl-sm border border-white/5 bg-slate-800/80';
-
-  return (
-    <View className={`mb-6 flex-row ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <View className={`max-w-[88%] ${isUser ? 'items-end' : 'items-start'}`}>
-        {!isUser ? (
-          <View className="mb-2 flex-row items-center gap-2">
-            <View className="h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15">
-              <Ionicons name="sparkles-outline" size={14} color="#6ee7b7" />
-            </View>
-            <Text className="text-xs font-medium uppercase tracking-[1.2px] text-white/35">
-              Atlas
-            </Text>
-          </View>
-        ) : null}
-
-        <Pressable>
-          <View className={`rounded-3xl px-4 py-3 ${bubbleClass}`}>
-            <Text
-              selectable
-              className={`text-sm leading-6 ${isUser ? 'text-white' : 'text-white/90'}`}>
-              {message.content}
-              {isStreaming && '▎'}
-            </Text>
-            {!isStreaming && (
-              <Text className={`mt-2 text-[10px] ${isUser ? 'text-white/55' : 'text-white/30'}`}>
-                {formatTime(message.created_at)}
-              </Text>
-            )}
-          </View>
-        </Pressable>
-
-        {isUser ? (
-          <Text className="mt-2 text-[11px] font-medium uppercase tracking-[1.2px] text-white/25">
-            You
-          </Text>
-        ) : null}
-
-        {!isStreaming ? (
-          <View className="mt-2 flex-row flex-wrap gap-2">
-            {onCopy ? (
-              <Pressable
-                onPress={onCopy}
-                className="border-white/8 rounded-full border bg-white/5 px-3 py-2">
-                <Text className="text-[11px] font-medium text-white/75">Copy</Text>
-              </Pressable>
-            ) : null}
-            {onEdit ? (
-              <Pressable
-                onPress={onEdit}
-                className="border-white/8 rounded-full border bg-white/5 px-3 py-2">
-                <Text className="text-[11px] font-medium text-white/75">Edit</Text>
-              </Pressable>
-            ) : null}
-            {onRetry ? (
-              <Pressable
-                onPress={onRetry}
-                className="border-white/8 rounded-full border bg-white/5 px-3 py-2">
-                <Text className="text-[11px] font-medium text-white/75">
-                  {isUser ? 'Resend' : 'Regenerate'}
-                </Text>
-              </Pressable>
-            ) : null}
-            {onShare ? (
-              <Pressable
-                onPress={onShare}
-                className="border-white/8 rounded-full border bg-white/5 px-3 py-2">
-                <Text className="text-[11px] font-medium text-white/75">Share</Text>
-              </Pressable>
-            ) : null}
-=======
 
   const handleLongPress = useCallback(async () => {
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch {
-      // noop
-    }
-
-    Alert.alert('Message', undefined, [
-      {
-        text: 'Copy',
-        onPress: async () => {
-          try {
-            await Clipboard.setStringAsync(message.content);
-          } catch {
-            // noop
-          }
-          onCopy?.();
-        },
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    await Clipboard.setStringAsync(message.content);
+    Alert.alert('Copied', 'Message copied to clipboard.');
+    onCopy?.();
   }, [message.content, onCopy]);
 
   const bubbleContent = (
@@ -259,15 +160,12 @@ export function MessageBubble({ message, isStreaming, onCopy, onEdit, onRetry, o
               <ActionButton label={isUser ? 'Resend' : 'Regenerate'} onPress={onRetry} />
             ) : null}
             {onShare ? <ActionButton label="Share" onPress={onShare} /> : null}
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
           </View>
         ) : null}
       </View>
     </View>
   );
 }
-<<<<<<< HEAD
-=======
 
 const styles = StyleSheet.create({
   row: {
@@ -419,4 +317,3 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.75)',
   },
 });
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551

@@ -4,9 +4,6 @@ import { useRouter } from 'expo-router';
 import { useConnectionStore } from '@/store/connection.store';
 
 export default function Index() {
-<<<<<<< HEAD
-  return <Redirect href="/chat" />;
-=======
   const router = useRouter();
   const { connectToDesktop, desktopIP, desktopPort, inferenceProvider } = useConnectionStore();
 
@@ -43,5 +40,4 @@ export default function Index() {
       </Text>
     </View>
   );
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
 }

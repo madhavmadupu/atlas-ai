@@ -1,30 +1,16 @@
-<<<<<<< HEAD
-import { Ionicons } from '@expo/vector-icons';
-import { View, TextInput, Pressable, Text } from 'react-native';
-=======
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Keyboard,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
 
 interface Props {
   onSend: (content: string) => void;
@@ -49,9 +35,8 @@ export function MessageInput({
 }: Props) {
   const insets = useSafeAreaInsets();
   const keyboardVisible = useSharedKeyboardVisibility();
-
   const sendScale = useSharedValue(1);
-  const sendOpacity = useSharedValue(0);
+  const sendOpacity = useSharedValue(0.3);
   const hasText = value.trim().length > 0;
 
   useEffect(() => {
@@ -64,32 +49,11 @@ export function MessageInput({
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
     if (!trimmed || isStreaming) return;
-<<<<<<< HEAD
-    onSend(trimmed);
-  };
-
-  return (
-    <View className="border-t border-white/5 bg-slate-950 px-4 pb-6 pt-3">
-=======
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {
-      // noop
-    }
-    sendScale.value = withSpring(0.85, { damping: 8 }, () => {
-      sendScale.value = withSpring(1, { damping: 12 });
+    sendScale.value = withSpring(0.9, { damping: 12, stiffness: 220 }, () => {
+      sendScale.value = withSpring(1, { damping: 12, stiffness: 200 });
     });
     onSend(trimmed);
   }, [isStreaming, onSend, sendScale, value]);
-
-  const handleStop = useCallback(() => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch {
-      // noop
-    }
-    onStop();
-  }, [onStop]);
 
   const sendAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: sendScale.value }],
@@ -109,7 +73,6 @@ export function MessageInput({
         </View>
       ) : null}
 
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
       {isEditing ? (
         <View style={styles.editBanner}>
           <View style={styles.editBannerLeft}>
@@ -122,14 +85,7 @@ export function MessageInput({
         </View>
       ) : null}
 
-<<<<<<< HEAD
-      <View className="flex-row items-end gap-2 rounded-3xl border border-white/10 bg-slate-800/60 px-3 py-2 shadow-sm shadow-black/20">
-        <Pressable className="h-[44px] w-[44px] items-center justify-center rounded-full bg-white/5 disabled:opacity-50">
-          <Ionicons name="add" size={24} color="#94a3b8" />
-        </Pressable>
-=======
       <View style={styles.inputRow}>
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
         <TextInput
           value={value}
           onChangeText={onChangeText}
@@ -138,47 +94,18 @@ export function MessageInput({
           editable={!isStreaming}
           multiline
           maxLength={4000}
-<<<<<<< HEAD
-          className="mb-0.5 max-h-[140px] min-h-[44px] flex-1 px-2 py-3 text-sm text-white"
-          style={{ textAlignVertical: 'top' }}
-        />
-
-        {isStreaming ? (
-          <Pressable
-            onPress={onStop}
-            className="h-[44px] w-[44px] items-center justify-center rounded-full bg-red-600 active:bg-red-700">
-            <View className="h-4 w-4 rounded-sm bg-white" />
-=======
           style={styles.textInput}
           keyboardAppearance="dark"
           returnKeyType="default"
         />
 
         {isStreaming ? (
-          <Pressable onPress={handleStop} style={styles.stopBtn}>
+          <Pressable onPress={onStop} style={styles.stopBtn}>
             <View style={styles.stopIcon} />
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
           </Pressable>
         ) : (
-          <Pressable
+          <AnimatedPressable
             onPress={handleSend}
-<<<<<<< HEAD
-            disabled={!value.trim()}
-            className={`h-[44px] w-[44px] items-center justify-center rounded-full ${
-              value.trim() ? 'bg-indigo-600 active:bg-indigo-700' : 'bg-white/5'
-            }`}>
-            <Ionicons
-              name="arrow-up"
-              size={20}
-              color={value.trim() ? '#ffffff' : '#64748b'}
-            />
-          </Pressable>
-        )}
-      </View>
-    </View>
-  );
-}
-=======
             disabled={!hasText}
             style={[styles.sendBtn, hasText && styles.sendActive, sendAnimStyle]}>
             <Text style={[styles.sendArrow, hasText && styles.sendArrowActive]}>↑</Text>
@@ -371,4 +298,3 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.12)',
   },
 });
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551

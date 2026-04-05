@@ -78,7 +78,7 @@ interface ChatActions {
   loadConversations: () => Promise<void>;
   loadMessages: (conversationId: string) => Promise<void>;
   setActiveConversation: (id: string | null) => void;
-  createConversation: (model: string) => Promise<string>;
+  createConversation: (model: string, personaId?: string) => Promise<string>;
   deleteConversation: (id: string) => Promise<void>;
   addUserMessage: (content: string, conversationId?: string | null) => void;
   startStreaming: () => void;
@@ -137,11 +137,7 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
     }
   },
 
-<<<<<<< HEAD
-  createConversation: async (model: string) => {
-=======
-  createConversation: async (model: string, personaId?: string) => {
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
+  createConversation: async (model: string, _personaId?: string) => {
     const now = new Date().toISOString();
     const id = generateId();
     const conversation: Conversation = {
@@ -261,44 +257,41 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   },
 
   finishStreaming: () => {
-    const { streamingContent, activeConversationId, messages } = get();
-
-    if (!streamingContent) {
+    const state = get();
+    if (!state.streamingContent || !state.activeConversationId) {
       set({ isStreaming: false, streamingContent: '' });
       return;
     }
 
-    const assistantMessage: Message = {
+    const message: Message = {
       id: generateId(),
-      conversation_id: activeConversationId ?? '',
+      conversation_id: state.activeConversationId,
       role: 'assistant',
-      content: streamingContent,
+      content: state.streamingContent,
       created_at: new Date().toISOString(),
     };
 
-    set((state) => ({
-      conversations: sortConversations(
-        state.conversations.map((conversation) =>
-          conversation.id === assistantMessage.conversation_id
-            ? { ...conversation, updated_at: assistantMessage.created_at }
-            : conversation
-        )
-      ),
-      messages: [...messages, assistantMessage],
-      isStreaming: false,
-      streamingContent: '',
-    }));
+    set((current) => {
+      const conversations = current.conversations.map((conversation) =>
+        conversation.id === message.conversation_id
+          ? { ...conversation, updated_at: message.created_at }
+          : conversation
+      );
+
+      return {
+        conversations: sortConversations(conversations),
+        messages: [...current.messages, message],
+        isStreaming: false,
+        streamingContent: '',
+      };
+    });
 
     if (isLocalProvider()) {
-      void appendLocalMessage(assistantMessage);
+      void appendLocalMessage(message);
     }
   },
 
-  setError: (error) => {
-    set({ error, isStreaming: false, streamingContent: '' });
-  },
+  setError: (error) => set({ error, isStreaming: false, streamingContent: '' }),
 
-  clearMessages: () => {
-    set({ messages: [], streamingContent: '', error: null });
-  },
+  clearMessages: () => set({ messages: [], streamingContent: '', error: null }),
 }));

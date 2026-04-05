@@ -12,13 +12,8 @@ export default function RootLayout() {
           headerTintColor: '#ffffff',
           contentStyle: { backgroundColor: '#0a0a0a' },
           headerShadowVisible: false,
-<<<<<<< HEAD
-        }}>
-=======
           headerTitleStyle: { fontSize: 17, fontWeight: '600' },
-        }}
-      >
->>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
+        }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="connect" options={{ title: 'Connect to Desktop' }} />
         <Stack.Screen name="chat/index" options={{ headerShown: false }} />
