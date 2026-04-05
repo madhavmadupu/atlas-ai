@@ -27,7 +27,7 @@ export function MessageInput({
   };
 
   return (
-    <View className="bg-transparent px-4 pb-6 pt-3">
+    <View className="border-t border-white/5 bg-slate-950 px-4 pb-6 pt-3">
       {isEditing ? (
         <View className="mb-3 flex-row items-center justify-between rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3">
           <View className="flex-row items-center gap-2">
@@ -42,12 +42,9 @@ export function MessageInput({
         </View>
       ) : null}
 
-      <View className="flex-row items-end gap-2 rounded-[32px] border border-white/10 bg-slate-800/60 p-2 shadow-lg shadow-black/20">
+      <View className="flex-row items-end gap-2 rounded-3xl border border-white/10 bg-slate-800/60 px-3 py-2 shadow-sm shadow-black/20">
         <Pressable className="h-[44px] w-[44px] items-center justify-center rounded-full bg-white/5 disabled:opacity-50">
           <Ionicons name="add" size={24} color="#94a3b8" />
-        </Pressable>
-        <Pressable className="h-[44px] w-[44px] items-center justify-center rounded-full bg-white/5 disabled:opacity-50">
-          <Ionicons name="camera-outline" size={22} color="#94a3b8" />
         </Pressable>
         <TextInput
           value={value}
