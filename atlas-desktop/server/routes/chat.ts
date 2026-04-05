@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { OllamaService } from "../services/ollama.service";
+import { MemoryService } from "../services/memory.service";
 import * as db from "../db";
 import crypto from "crypto";
 
@@ -12,6 +13,7 @@ interface ChatBody {
 
 export async function chatRoutes(fastify: FastifyInstance) {
   const ollama = new OllamaService();
+  const memoryService = new MemoryService(ollama);
 
   fastify.post<{ Body: ChatBody }>("/chat", async (request, reply) => {
     const { messages, model, conversationId, systemPrompt } = request.body;
@@ -23,15 +25,21 @@ export async function chatRoutes(fastify: FastifyInstance) {
     reply.raw.setHeader("X-Accel-Buffering", "no");
     reply.raw.flushHeaders();
 
+    // RAG: Augment system prompt with relevant user memories
+    const userMsg = messages[messages.length - 1];
+    const augmentedPrompt = memoryService.buildAugmentedPrompt(
+      systemPrompt,
+      userMsg?.content ?? "",
+    );
+
     const fullMessages = [
-      ...(systemPrompt
-        ? [{ role: "system" as const, content: systemPrompt }]
+      ...(augmentedPrompt
+        ? [{ role: "system" as const, content: augmentedPrompt }]
         : []),
       ...messages,
     ];
 
     // Save user message to DB
-    const userMsg = messages[messages.length - 1];
     if (conversationId && userMsg?.role === "user") {
       try {
         db.messages.create({
@@ -75,6 +83,16 @@ export async function chatRoutes(fastify: FastifyInstance) {
                 );
                 db.conversations.updateTitle(conversationId, title);
               }
+
+              // RAG: Extract and store user memories in the background
+              memoryService
+                .extractAndStore(
+                  model,
+                  userMsg?.content ?? "",
+                  fullResponse,
+                  conversationId,
+                )
+                .catch(() => {});
             } catch {
               // DB errors shouldn't break streaming
             }

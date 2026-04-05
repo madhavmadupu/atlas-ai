@@ -7,6 +7,7 @@ import { chatRoutes } from "./routes/chat";
 import { conversationRoutes } from "./routes/conversations";
 import { modelsRoutes } from "./routes/models";
 import { settingsRoutes } from "./routes/settings";
+import { memoryRoutes } from "./routes/memory";
 import { initDb, closeDb } from "./db";
 import { networkInterfaces } from "os";
 
@@ -47,6 +48,7 @@ export async function startServer({
   await server.register(conversationRoutes, { prefix: "/api" });
   await server.register(modelsRoutes, { prefix: "/api" });
   await server.register(settingsRoutes, { prefix: "/api" });
+  await server.register(memoryRoutes, { prefix: "/api" });
 
   // Serve the static Next.js export (UI)
   if (staticDir) {

@@ -59,6 +59,20 @@ function runMigrations(database: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at);
+
+    CREATE TABLE IF NOT EXISTS user_memories (
+      id                     TEXT PRIMARY KEY,
+      category               TEXT NOT NULL CHECK(category IN ('preference', 'fact', 'interest', 'personality', 'context')),
+      content                TEXT NOT NULL,
+      keywords               TEXT NOT NULL DEFAULT '',
+      source_conversation_id TEXT,
+      confidence             REAL NOT NULL DEFAULT 0.8,
+      created_at             TEXT NOT NULL,
+      updated_at             TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_memories_category ON user_memories(category);
+    CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON user_memories(updated_at);
   `);
 }
 
@@ -202,5 +216,105 @@ export const settings = {
       result[row.key] = row.value;
     }
     return result;
+  },
+};
+
+export interface UserMemory {
+  id: string;
+  category: string;
+  content: string;
+  keywords: string;
+  source_conversation_id: string | null;
+  confidence: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const memories = {
+  findAll: (): UserMemory[] => {
+    return getDb()
+      .prepare("SELECT * FROM user_memories ORDER BY updated_at DESC")
+      .all() as UserMemory[];
+  },
+
+  findByCategory: (category: string): UserMemory[] => {
+    return getDb()
+      .prepare(
+        "SELECT * FROM user_memories WHERE category = ? ORDER BY updated_at DESC",
+      )
+      .all(category) as UserMemory[];
+  },
+
+  search: (queryWords: string[]): UserMemory[] => {
+    if (queryWords.length === 0) return [];
+    // Match memories whose keywords or content contain any of the query words
+    const conditions = queryWords.map(
+      () => "(LOWER(keywords) LIKE ? OR LOWER(content) LIKE ?)",
+    );
+    const params = queryWords.flatMap((w) => {
+      const term = `%${w.toLowerCase()}%`;
+      return [term, term];
+    });
+    const sql = `SELECT *, (${queryWords
+      .map(
+        () =>
+          "(CASE WHEN LOWER(keywords) LIKE ? THEN 2 ELSE 0 END + CASE WHEN LOWER(content) LIKE ? THEN 1 ELSE 0 END)",
+      )
+      .join(" + ")}) AS relevance FROM user_memories WHERE ${conditions.join(" OR ")} ORDER BY relevance DESC, confidence DESC LIMIT 10`;
+    const scoreParams = queryWords.flatMap((w) => {
+      const term = `%${w.toLowerCase()}%`;
+      return [term, term];
+    });
+    return getDb()
+      .prepare(sql)
+      .all([...scoreParams, ...params]) as UserMemory[];
+  },
+
+  create: (mem: {
+    id: string;
+    category: string;
+    content: string;
+    keywords: string;
+    sourceConversationId?: string;
+    confidence?: number;
+  }) => {
+    const now = new Date().toISOString();
+    getDb()
+      .prepare(
+        "INSERT INTO user_memories (id, category, content, keywords, source_conversation_id, confidence, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        mem.id,
+        mem.category,
+        mem.content,
+        mem.keywords,
+        mem.sourceConversationId ?? null,
+        mem.confidence ?? 0.8,
+        now,
+        now,
+      );
+  },
+
+  update: (id: string, fields: { content?: string; keywords?: string; confidence?: number }) => {
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    if (fields.content !== undefined) { sets.push("content = ?"); vals.push(fields.content); }
+    if (fields.keywords !== undefined) { sets.push("keywords = ?"); vals.push(fields.keywords); }
+    if (fields.confidence !== undefined) { sets.push("confidence = ?"); vals.push(fields.confidence); }
+    if (sets.length === 0) return;
+    sets.push("updated_at = ?");
+    vals.push(new Date().toISOString());
+    vals.push(id);
+    getDb().prepare(`UPDATE user_memories SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+  },
+
+  delete: (id: string) => {
+    getDb().prepare("DELETE FROM user_memories WHERE id = ?").run(id);
+  },
+
+  findDuplicate: (content: string): UserMemory | undefined => {
+    return getDb()
+      .prepare("SELECT * FROM user_memories WHERE LOWER(content) = LOWER(?) LIMIT 1")
+      .get(content) as UserMemory | undefined;
   },
 };

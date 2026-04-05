@@ -14,4 +14,6 @@ export const routes = {
   conversation: (id: string) => `${getBaseUrl()}/api/conversations/${id}`,
   models: () => `${getBaseUrl()}/api/models`,
   settings: () => `${getBaseUrl()}/api/settings`,
+  memories: () => `${getBaseUrl()}/api/memories`,
+  memoriesSearch: (q: string) => `${getBaseUrl()}/api/memories/search?q=${encodeURIComponent(q)}`,
 };

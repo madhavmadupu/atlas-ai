@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { routes } from '@/lib/api';
 import { localLlamaEngine } from '@/lib/local-llama-engine';
 import { validateLocalChatModel } from '@/lib/model-validation';
+import { buildAugmentedPrompt, extractAndStoreMemories } from '@/lib/memory-service';
 import { useConnectionStore } from '@/store/connection.store';
 import { useChatStore } from '@/store/chat.store';
 
@@ -57,13 +58,16 @@ export function useStreamingResponse(conversationId: string | null) {
             throw new Error(validation.reason);
           }
 
-          const localMessages = localSettings.systemPrompt.trim()
-            ? [
-                { role: 'system' as const, content: localSettings.systemPrompt.trim() },
-                ...messages.map((message) => ({ role: message.role, content: message.content })),
-                { role: 'user' as const, content },
-              ]
-            : allMessages;
+          // RAG: Augment system prompt with relevant user memories
+          const basePrompt = localSettings.systemPrompt.trim() ||
+            'You are Atlas AI, a private offline assistant.';
+          const augmentedPrompt = await buildAugmentedPrompt(basePrompt, content);
+
+          const localMessages = [
+            { role: 'system' as const, content: augmentedPrompt },
+            ...messages.map((message) => ({ role: message.role, content: message.content })),
+            { role: 'user' as const, content },
+          ];
 
           await localLlamaEngine.chat(
             localModelPath,
@@ -72,6 +76,18 @@ export function useStreamingResponse(conversationId: string | null) {
             appendStreamToken
           );
           finishStreaming();
+
+          // RAG: Extract and store memories in background (don't block UI)
+          const streamedContent = useChatStore.getState().messages.at(-1)?.content;
+          if (streamedContent && localModelPath) {
+            extractAndStoreMemories(
+              localModelPath,
+              localSettings,
+              content,
+              streamedContent,
+              convId ?? undefined
+            ).catch(() => {});
+          }
         } else {
           abortRef.current = new AbortController();
 
