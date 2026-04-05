@@ -1,36 +1,40 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { useConnectionStore } from '@/store/connection.store';
 
 export default function Index() {
-  const router = useRouter();
   const { connectToDesktop, desktopIP, desktopPort, inferenceProvider } = useConnectionStore();
+  const [destination, setDestination] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
       if (inferenceProvider === 'local') {
-        if (!cancelled) router.replace('/chat');
+        if (!cancelled) setDestination('/chat');
         return;
       }
 
       if (!desktopIP) {
-        if (!cancelled) router.replace('/connect');
+        if (!cancelled) setDestination('/connect');
         return;
       }
 
       const ok = await connectToDesktop(desktopIP, desktopPort);
       if (cancelled) return;
-      router.replace(ok ? '/chat' : '/connect');
+      setDestination(ok ? '/chat' : '/connect');
     }
 
     void init();
     return () => {
       cancelled = true;
     };
-  }, [connectToDesktop, desktopIP, desktopPort, inferenceProvider, router]);
+  }, [connectToDesktop, desktopIP, desktopPort, inferenceProvider]);
+
+  if (destination) {
+    return <Redirect href={destination} />;
+  }
 
   return (
     <View className="flex-1 items-center justify-center bg-[#0a0a0a]">
