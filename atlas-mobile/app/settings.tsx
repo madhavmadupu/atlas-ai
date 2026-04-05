@@ -190,11 +190,19 @@ export default function SettingsScreen() {
               </Text>
             </Pressable>
           </View>
+<<<<<<< HEAD
           {defaultModel && (
             <Text className="mt-1 text-xs text-white/40">
               Desktop default model: {defaultModel}
             </Text>
           )}
+=======
+          {defaultModel ? (
+            <Text className="mt-1 text-xs text-white/40">
+              Desktop default model: {defaultModel}
+            </Text>
+          ) : null}
+>>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
           <TextInput
             value={ip}
             onChangeText={setIp}

@@ -9,10 +9,10 @@ import type { Conversation, Message } from '@/lib/types';
 import { useConnectionStore } from '@/store/connection.store';
 
 function generateId(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = (Math.random() * 16) | 0;
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
   });
 }
 
@@ -22,7 +22,7 @@ function isLocalProvider(): boolean {
 
 function sortConversations(conversations: Conversation[]): Conversation[] {
   return [...conversations].sort(
-    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
   );
 }
 
@@ -104,9 +104,9 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
     }
 
     try {
-      const res = await fetch(routes.conversations());
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
+      const response = await fetch(routes.conversations());
+      if (!response.ok) throw new Error('Failed');
+      const data = await response.json();
       set({ conversations: data });
     } catch {
       set({ conversations: [] });
@@ -121,9 +121,9 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
     }
 
     try {
-      const res = await fetch(routes.conversation(conversationId));
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
+      const response = await fetch(routes.conversation(conversationId));
+      if (!response.ok) throw new Error('Failed');
+      const data = await response.json();
       set({ messages: data.messages ?? [] });
     } catch {
       set({ messages: [] });
@@ -137,7 +137,11 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
     }
   },
 
+<<<<<<< HEAD
   createConversation: async (model: string) => {
+=======
+  createConversation: async (model: string, personaId?: string) => {
+>>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
     const now = new Date().toISOString();
     const id = generateId();
     const conversation: Conversation = {
@@ -215,7 +219,7 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   },
 
   addUserMessage: (content: string, conversationId) => {
-    const msg: Message = {
+    const message: Message = {
       id: generateId(),
       conversation_id: conversationId ?? get().activeConversationId ?? '',
       role: 'user',
@@ -225,26 +229,26 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
 
     set((state) => {
       const conversations = state.conversations.map((conversation) =>
-        conversation.id === msg.conversation_id
+        conversation.id === message.conversation_id
           ? {
               ...conversation,
               title:
                 conversation.title === 'New Conversation'
                   ? buildConversationTitle(content)
                   : conversation.title,
-              updated_at: msg.created_at,
+              updated_at: message.created_at,
             }
           : conversation
       );
 
       return {
         conversations: sortConversations(conversations),
-        messages: [...state.messages, msg],
+        messages: [...state.messages, message],
       };
     });
 
     if (isLocalProvider()) {
-      void appendLocalMessage(msg);
+      void appendLocalMessage(message);
     }
   },
 

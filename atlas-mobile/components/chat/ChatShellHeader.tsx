@@ -9,6 +9,7 @@ interface ChatShellHeaderProps {
   onOpenSidebar: () => void;
   onOpenModelPicker: () => void;
   onOpenSettings: () => void;
+  onOpenMoreMenu?: () => void;
 }
 
 export function ChatShellHeader({
@@ -18,6 +19,7 @@ export function ChatShellHeader({
   onOpenSidebar,
   onOpenModelPicker,
   onOpenSettings,
+  onOpenMoreMenu,
 }: ChatShellHeaderProps) {
   const insets = useSafeAreaInsets();
 
@@ -54,12 +56,23 @@ export function ChatShellHeader({
             className="h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
             <Ionicons name="settings-outline" size={18} color="#ffffff" />
           </Pressable>
+<<<<<<< HEAD
           <View className="h-10 w-10 overflow-hidden rounded-2xl border border-white/10">
             <Image
               source={{ uri: 'https://i.pravatar.cc/100?img=33' }}
               className="h-full w-full"
             />
           </View>
+=======
+
+          {onOpenMoreMenu ? (
+            <Pressable
+              onPress={onOpenMoreMenu}
+              className="h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+              <Ionicons name="ellipsis-horizontal" size={18} color="#ffffff" />
+            </Pressable>
+          ) : null}
+>>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
         </View>
       </View>
     </View>

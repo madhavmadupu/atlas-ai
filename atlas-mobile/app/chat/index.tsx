@@ -228,6 +228,10 @@ export default function ChatHomeScreen() {
           onSend={(content) => void handleSend(content)}
           onStop={() => undefined}
           isStreaming={false}
+<<<<<<< HEAD
+=======
+          modelName={modelLabel}
+>>>>>>> e254bd679dc5ef5196bc1c9db79d4973e6787551
         />
 
         <ChatSidebar
