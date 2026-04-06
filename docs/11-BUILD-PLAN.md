@@ -21,7 +21,8 @@ Next:
 
 Status: implemented baseline.
 
-- Health, chat (SSE), conversations, models, settings — `atlas-desktop/server/routes/*`
+- Health, chat (SSE), conversations, models, settings, memories — `atlas-desktop/server/routes/*`
+- Memory/RAG service extracts user facts after each chat turn and augments future prompts — `atlas-desktop/server/services/memory.service.ts`
 
 Next:
 
@@ -33,6 +34,7 @@ Next:
 Status: implemented baseline.
 
 - Schema and query helpers in one file — `atlas-desktop/server/db.ts`
+- Includes `user_memories` table for RAG-based personalization
 
 Next:
 
@@ -90,10 +92,26 @@ Next:
 Status: implemented baseline.
 
 - Local conversations/messages stored in AsyncStorage — `atlas-mobile/store/chat.store.ts`
+- Local user memories stored in AsyncStorage — `atlas-mobile/lib/memory-storage.ts`
 
 Next:
 
 - Consider SQLite if AsyncStorage becomes a bottleneck
+
+### Memory / RAG
+
+Status: implemented.
+
+- Desktop: keyword-based memory extraction and retrieval via Ollama — `atlas-desktop/server/services/memory.service.ts`
+- Mobile (local): same approach via `llama.rn` — `atlas-mobile/lib/memory-service.ts`
+- Full CRUD API at `/api/memories` — `atlas-desktop/server/routes/memory.ts`
+- See `docs/14-MEMORY-RAG.md` for full architecture
+
+Next:
+
+- Consider vector/embedding-based retrieval for better semantic matching
+- Add memory management UI (view/edit/delete memories)
+- Explore cross-device memory sync between desktop and mobile
 
 ## Cross-cutting
 

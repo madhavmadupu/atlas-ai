@@ -13,6 +13,7 @@ It also serves the exported desktop UI as static files when started from Electro
 - Routes: `atlas-desktop/server/routes/*.ts`
 - Persistence: `atlas-desktop/server/db.ts`
 - Ollama integration: `atlas-desktop/server/services/ollama.service.ts`
+- Memory/RAG service: `atlas-desktop/server/services/memory.service.ts`
 
 ## Runtime configuration
 
@@ -76,6 +77,16 @@ Persistence behavior:
 - `GET /api/settings/:key` → `{ key, value }`
 - `POST /api/settings` → `{ success: true }`
 
+### Memories (RAG)
+
+- `GET /api/memories` → list all (optionally `?category=preference|fact|interest|personality|context`)
+- `GET /api/memories/search?q=...` → keyword search across stored memories
+- `POST /api/memories` → manually create a memory (`{ category, content, keywords? }`)
+- `PUT /api/memories/:id` → update content/keywords/confidence
+- `DELETE /api/memories/:id` → delete a memory
+
+Memories are also created automatically during chat — after each response, the LLM extracts user facts in the background. See `docs/14-MEMORY-RAG.md` for the full architecture.
+
 ## Notes for mobile
 
 Only the `desktop` provider uses this server.
@@ -115,6 +126,14 @@ SSE is easiest to observe with `curl -N`:
 curl -N http://localhost:3001/api/chat \
   -H "Content-Type: application/json" \
   -d '{"model":"qwen2.5:3b","messages":[{"role":"user","content":"Say hi in one sentence."}]}'
+```
+
+### Memories
+
+```bash
+curl http://localhost:3001/api/memories
+curl http://localhost:3001/api/memories?category=preference
+curl http://localhost:3001/api/memories/search?q=python+programming
 ```
 
 ## How to add a new endpoint

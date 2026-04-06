@@ -5,6 +5,7 @@ Atlas AI uses SQLite on the desktop to persist:
 - conversations
 - messages
 - settings
+- user memories (RAG)
 
 Mobile `local` mode does **not** use SQLite today (it uses AsyncStorage). Mobile `desktop` mode reads/writes through the desktop API, which persists into this database.
 
@@ -43,6 +44,14 @@ Tables:
 - `settings`
   - `key` (TEXT primary key)
   - `value` (TEXT)
+- `user_memories` (RAG — see `docs/14-MEMORY-RAG.md`)
+  - `id` (TEXT primary key)
+  - `category` (TEXT — preference/fact/interest/personality/context)
+  - `content` (TEXT)
+  - `keywords` (TEXT, comma-separated)
+  - `source_conversation_id` (TEXT nullable)
+  - `confidence` (REAL, default 0.8)
+  - `created_at`, `updated_at` (TEXT ISO timestamps)
 
 Indexes:
 
@@ -66,6 +75,7 @@ Indexes:
 - `conversations.findMany()`, `findById()`, `create()`, `updateTitle()`, `updateTimestamp()`, `delete()`
 - `messages.findByConversationId()`, `create()`, `getLastN()`
 - `settings.get()`, `set()`, `getAll()`
+- `memories.findAll()`, `findByCategory()`, `search()`, `findDuplicate()`, `create()`, `update()`, `delete()`
 
 These helpers are called from Fastify routes (`atlas-desktop/server/routes/*`).
 

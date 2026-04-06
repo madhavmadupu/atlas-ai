@@ -39,7 +39,8 @@ At runtime:
 - Fastify listens on `:3001` and exposes:
   - API routes under `/api/*`
   - the desktop UI as static files (Next.js export)
-- SQLite stores conversations/messages/settings on the desktop.
+- SQLite stores conversations/messages/settings/memories on the desktop.
+- After each chat response, the memory service extracts user facts in the background and stores them for future retrieval (see `docs/14-MEMORY-RAG.md`).
 
 The desktop UI (renderer) talks to Fastify via HTTP (`http://localhost:3001`).
 
@@ -56,7 +57,8 @@ The mobile app has a provider split. The UI stays the same, but the backend chan
 #### Provider: `local` (on-device, offline)
 
 - Runs a GGUF model in-process via `llama.rn` (native `llama.cpp`).
-- Persists chats/settings on the phone (AsyncStorage).
+- Persists chats/settings/memories on the phone (AsyncStorage).
+- Extracts and stores user memories locally for personalized responses.
 - Stores GGUF files in the app sandbox (Expo FileSystem).
 - Requires a dev build or release build (Expo Go cannot load native modules).
 

@@ -29,4 +29,5 @@ This folder is organized by module. Read the overview first, then drill down int
 - `11-BUILD-PLAN.md` — Current status + next milestones.
 - `12-AI-IDE-RULES.md` — Project rules and guardrails.
 - `13-TROUBLESHOOTING.md` — Common build/runtime problems and fixes.
+- `14-MEMORY-RAG.md` — Memory system: keyword-based RAG for personalized conversations.
 
